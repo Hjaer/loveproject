@@ -23,20 +23,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWeightChanged, float, NewWeight,
  * FInventorySlot
  *
  * A single slot in the survivor's pack.
- * RowName points to the row in the shared DataTable — no duplication of data.
- * The DataTable reference is shared so we can look up weight, value, etc.
+ * Zero-Pointer Policy: We store FDataTableRowHandle only — no raw UDataTable*
+ * or FItemDBRow* — so World Partition streaming cannot leave dangling refs.
+ * Row data is resolved on demand via Handle.GetRow<>() at read time.
  */
 USTRUCT(BlueprintType)
 struct GERCEK_API FInventorySlot {
   GENERATED_BODY()
 
-  // The DataTable row name that identifies this item.
+  // Handle-based reference: RowName + DataTable (soft). No raw pointer storage.
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival | Inventory")
-  FName RowName = NAME_None;
-
-  // The DataTable that owns this row.
-  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival | Inventory")
-  const UDataTable *Table = nullptr;
+  FDataTableRowHandle RowHandle;
 
   // How many units are stacked in this slot?
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival | Inventory")
@@ -44,14 +41,14 @@ struct GERCEK_API FInventorySlot {
 
   // Is this slot occupied?
   bool IsValid() const {
-    return RowName != NAME_None && Table != nullptr && Quantity > 0;
+    return !RowHandle.IsNull() && Quantity > 0;
   }
 
-  // Fetch the underlying row data. Returns nullptr if invalid.
+  // Resolve row at read time; never stores pointer. Returns nullptr if handle invalid or table unloaded.
   const FItemDBRow *GetRow() const {
     if (!IsValid())
       return nullptr;
-    return Table->FindRow<FItemDBRow>(RowName, TEXT("InventorySlot::GetRow"));
+    return RowHandle.GetRow<FItemDBRow>(TEXT("FInventorySlot::GetRow"));
   }
 };
 
@@ -94,13 +91,16 @@ protected:
 public:
   // --- Core Inventory Operations ---
 
-  // Try to add an item by DataTable row reference. Returns true on success.
-  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory")
-  bool AddItem(FName RowName, const UDataTable *Table, int32 Qty = 1);
+  // Handle-based add: no raw pointers. Use ItemRowHandle.RowName + ItemRowHandle.DataTable internally.
+  // Safe for World Partition: no UDataTable* or row pointers stored or passed.
+  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory",
+            meta = (DisplayName = "Add Item (Handle)"))
+  bool AddItem(const FDataTableRowHandle &ItemRowHandle, int32 Qty = 1);
 
-  // Remove Qty units of RowName from the inventory. Returns true if removed.
-  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory")
-  bool RemoveItem(FName RowName, int32 Qty = 1);
+  // Remove Qty units of the item identified by handle. Returns true if removed.
+  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory",
+            meta = (DisplayName = "Remove Item (Handle)"))
+  bool RemoveItem(const FDataTableRowHandle &ItemRowHandle, int32 Qty = 1);
 
   // --- UI Query Functions ---
 

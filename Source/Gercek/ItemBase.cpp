@@ -78,13 +78,11 @@ void AItemBase::Interact(AGercekCharacter *Player) {
     return;
   }
 
-  // Oyuncunun envanter bileşenini bul
+  // Oyuncunun envanter bileşenini bul — handle-based add (Zero-Pointer Policy).
   UInventoryComponent *Inventory =
       Player->FindComponentByClass<UInventoryComponent>();
   if (IsValid(Inventory)) {
-    // AddItem(FName RowName, const UDataTable* Table, int32 Qty)
-    // Tüm struct yerine sadece satır adresini (RowName + Table) iletiyoruz.
-    Inventory->AddItem(ItemRowHandle.RowName, ItemRowHandle.DataTable, 1);
+    Inventory->AddItem(ItemRowHandle, 1);
   }
 
   // Eşyayı dünyadan sil

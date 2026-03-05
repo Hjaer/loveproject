@@ -64,19 +64,8 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
     return;
   }
 
-  // DataTable referansını null-safe şekilde al.
-  // .Get() null dönebilir; açık kontrolle crash önlüyoruz.
-  const UDataTable *DataTablePtr = ItemRowHandle.DataTable.Get();
-  if (!DataTablePtr) {
-    UE_LOG(LogTemp, Warning,
-           TEXT("[WorldItem] '%s' DataTable referansı null. AddItem iptal."),
-           *GetName());
-    return;
-  }
-
-  // Delegate all weight/stack logic to InventoryComponent.
-  if (Inventory->AddItem(ItemRowHandle.RowName, DataTablePtr, 1)) {
-    // Success — the item is now in the pack. Remove it from the world.
+  // Handle-based add: no raw pointers. Safe for World Partition (no dangling refs).
+  if (Inventory->AddItem(ItemRowHandle, 1)) {
     Destroy();
   } else {
     UE_LOG(LogTemp, Warning,

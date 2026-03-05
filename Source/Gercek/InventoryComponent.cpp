@@ -16,23 +16,22 @@ void UInventoryComponent::TickComponent(
   Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 }
 
-bool UInventoryComponent::AddItem(FName RowName, const UDataTable *Table,
+bool UInventoryComponent::AddItem(const FDataTableRowHandle &ItemRowHandle,
                                   int32 Qty) {
-  // Guard: bad args
-  if (RowName == NAME_None || !Table || Qty <= 0) {
+  // Guard: handle-based — no raw pointer args.
+  if (ItemRowHandle.IsNull() || Qty <= 0) {
     UE_LOG(LogTemp, Warning,
-           TEXT("[Inventory] Rejected: invalid row name, null table, or "
-                "zero quantity."));
+           TEXT("[Inventory] Rejected: null handle or zero quantity."));
     return false;
   }
 
-  // Fetch the row to validate the item and read its properties.
+  // Resolve row only for this scope; never store the pointer (Zero-Pointer Policy).
   const FItemDBRow *Row =
-      Table->FindRow<FItemDBRow>(RowName, TEXT("InventoryComponent::AddItem"));
+      ItemRowHandle.GetRow<FItemDBRow>(TEXT("InventoryComponent::AddItem"));
   if (!Row) {
     UE_LOG(LogTemp, Warning,
-           TEXT("[Inventory] Rejected: row '%s' not found in DataTable."),
-           *RowName.ToString());
+           TEXT("[Inventory] Rejected: row '%s' not found or table not loaded."),
+           *ItemRowHandle.RowName.ToString());
     return false;
   }
 
@@ -48,10 +47,10 @@ bool UInventoryComponent::AddItem(FName RowName, const UDataTable *Table,
 
   int32 Remaining = Qty;
 
-  // Try to merge into an existing stack if stackable (MaxStackSize > 1).
+  // Match slots by handle (RowName + DataTable), not raw pointer.
   if (Row->IsStackable()) {
     for (FInventorySlot &Slot : InventoryItems) {
-      if (Slot.RowName != RowName || Slot.Table != Table)
+      if (Slot.RowHandle != ItemRowHandle)
         continue;
 
       const int32 SpaceLeft = Row->MaxStackSize - Slot.Quantity;
@@ -69,16 +68,14 @@ bool UInventoryComponent::AddItem(FName RowName, const UDataTable *Table,
     }
   }
 
-  // Overflow or non-stackable — claim a new slot.
+  // Overflow or non-stackable — claim a new slot (store handle only, no pointer).
   if (Remaining > 0) {
     FInventorySlot NewSlot;
-    NewSlot.RowName = RowName;
-    NewSlot.Table = Table;
+    NewSlot.RowHandle = ItemRowHandle;
     NewSlot.Quantity = Remaining;
     InventoryItems.Add(NewSlot);
   }
 
-  // Recalculate the burden and fire delegates.
   CalculateTotalWeight();
   OnInventoryUpdated.Broadcast();
 
@@ -98,17 +95,18 @@ bool UInventoryComponent::AddItem(FName RowName, const UDataTable *Table,
   return true;
 }
 
-bool UInventoryComponent::RemoveItem(FName RowName, int32 Qty) {
-  if (RowName == NAME_None || Qty <= 0) {
+bool UInventoryComponent::RemoveItem(const FDataTableRowHandle &ItemRowHandle,
+                                     int32 Qty) {
+  if (ItemRowHandle.IsNull() || Qty <= 0) {
     UE_LOG(LogTemp, Warning,
-           TEXT("[Inventory] RemoveItem: invalid RowName or zero Qty."));
+           TEXT("[Inventory] RemoveItem: null handle or zero Qty."));
     return false;
   }
 
   int32 Remaining = Qty;
   for (int32 i = InventoryItems.Num() - 1; i >= 0; --i) {
     FInventorySlot &Slot = InventoryItems[i];
-    if (Slot.RowName != RowName)
+    if (Slot.RowHandle != ItemRowHandle)
       continue;
 
     if (Slot.Quantity <= Remaining) {
@@ -127,8 +125,7 @@ bool UInventoryComponent::RemoveItem(FName RowName, int32 Qty) {
     UE_LOG(LogTemp, Warning,
            TEXT("[Inventory] RemoveItem: could not remove full Qty of '%s'. "
                 "Short by %d."),
-           *RowName.ToString(), Remaining);
-    // Still recalculate in case we removed part of it.
+           *ItemRowHandle.RowName.ToString(), Remaining);
   }
 
   CalculateTotalWeight();
