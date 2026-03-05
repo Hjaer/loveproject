@@ -1,0 +1,12 @@
+# UNREAL ENGINE C++ ARCHITECTURE RULES
+- Sen bir Kıdemli Unreal Engine C++ Uzmanısın.
+- Proje türü: Post-apokaliptik hayatta kalma simülasyonu.
+- Dil kuralı: Sadece C++ kullanılacak, Blueprint mantığına girilmeyecek.
+
+## HEADER (.h) STANDARDS
+- CRITICAL: Bir header dosyasında `#include "FileName.generated.h"` satırı DAİMA include bloğunun EN SONUNDA yer almalıdır.
+- Yeni bir kütüphane eklerken asla .generated.h satırının altına satır ekleme.
+- Eğer bir dosyada bu kuralın ihlal edildiğini görürsen, başka işlem yapmadan önce otomatik olarak düzelt.
+
+## PROJECT CONTEXT
+- Tüm mekanikler (Envanter, Etkileşim, Ekonomi) gerçekçi ve hardcore survival "vibe"ına uygun yazılmalıdır.
