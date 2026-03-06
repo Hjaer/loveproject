@@ -161,6 +161,11 @@ TArray<FInventorySlot> UInventoryComponent::GetInventoryForUI() const {
   return InventoryItems;
 }
 
+void UInventoryComponent::SetMaxWeight(float NewMaxWeight) {
+  MaxCapacity = FMath::Max(0.0f, NewMaxWeight);
+  CalculateTotalWeight(); // Recalculate ratios and fire events if needed.
+}
+
 void UInventoryComponent::GetInventoryDetailsForUI(
     TArray<FInventorySlot> &OutItems, float &OutTotalWeight,
     float &OutMaxCapacity) const {

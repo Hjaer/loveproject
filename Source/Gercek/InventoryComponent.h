@@ -40,11 +40,10 @@ struct GERCEK_API FInventorySlot {
   int32 Quantity = 1;
 
   // Is this slot occupied?
-  bool IsValid() const {
-    return !RowHandle.IsNull() && Quantity > 0;
-  }
+  bool IsValid() const { return !RowHandle.IsNull() && Quantity > 0; }
 
-  // Resolve row at read time; never stores pointer. Returns nullptr if handle invalid or table unloaded.
+  // Resolve row at read time; never stores pointer. Returns nullptr if handle
+  // invalid or table unloaded.
   const FItemDBRow *GetRow() const {
     if (!IsValid())
       return nullptr;
@@ -91,8 +90,9 @@ protected:
 public:
   // --- Core Inventory Operations ---
 
-  // Handle-based add: no raw pointers. Use ItemRowHandle.RowName + ItemRowHandle.DataTable internally.
-  // Safe for World Partition: no UDataTable* or row pointers stored or passed.
+  // Handle-based add: no raw pointers. Use ItemRowHandle.RowName +
+  // ItemRowHandle.DataTable internally. Safe for World Partition: no
+  // UDataTable* or row pointers stored or passed.
   UFUNCTION(BlueprintCallable, Category = "Survival | Inventory",
             meta = (DisplayName = "Add Item (Handle)"))
   bool AddItem(const FDataTableRowHandle &ItemRowHandle, int32 Qty = 1);
@@ -125,6 +125,10 @@ public:
   // Returns the maximum weight the owner can carry.
   UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Survival | UI")
   float GetMaxWeight() const { return MaxCapacity; }
+
+  // Sets a new maximum weight limit (e.g. from Backpack upgrades).
+  UFUNCTION(BlueprintCallable, Category = "Survival | Stats")
+  void SetMaxWeight(float NewMaxWeight);
 
   // Returns encumbrance as a 0.0-1.0 ratio. Bind this to a UI progress bar.
   UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Survival | UI")

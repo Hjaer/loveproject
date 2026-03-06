@@ -30,7 +30,8 @@ enum class EItemType : uint8 {
   Med UMETA(DisplayName = "Medical (Tibbi)"),
   Ammo UMETA(DisplayName = "Ammo (Muhimmat)"),
   Weapon UMETA(DisplayName = "Weapon (Silah)"),
-  Quest UMETA(DisplayName = "Quest (Gorev)")
+  Quest UMETA(DisplayName = "Quest (Gorev)"),
+  Backpack UMETA(DisplayName = "Backpack (Sirt Cantasi)")
 };
 
 /**
@@ -116,4 +117,9 @@ public:
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Economy",
             meta = (ClampMin = "0"))
   int32 ItemValue = 0;
+
+  // Çanta türü eşyalar için ekstra kapasite değeri.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Upgrade",
+            meta = (ClampMin = "0.0"))
+  float ExtraCapacity = 0.0f;
 };
