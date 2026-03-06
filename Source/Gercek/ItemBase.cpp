@@ -1,9 +1,22 @@
 #include "ItemBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-
-// Envantere eşya eklemek için
 #include "InventoryComponent.h"
+
+// ---------------------------------------------------------------------------
+// PostApocItems Data Table — proje eşya tablosu [cite: 2026-02-20].
+// Tüm FDataTableRowHandle aramaları bu tablo üzerinden yapılır.
+// ---------------------------------------------------------------------------
+static const FSoftObjectPath
+    PostApocItemsPath(TEXT("/Game/Gercek/Datas/PostApocItems.PostApocItems"));
+
+static FDataTableRowHandle BuildPostApocHandle(FName RowName) {
+  FDataTableRowHandle Handle;
+  Handle.RowName = RowName;
+  Handle.DataTable =
+      TSoftObjectPtr<UDataTable>(PostApocItemsPath).LoadSynchronous();
+  return Handle;
+}
 
 AItemBase::AItemBase() {
   PrimaryActorTick.bCanEverTick = false;
@@ -11,80 +24,73 @@ AItemBase::AItemBase() {
   ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
   RootComponent = ItemMesh;
 
-  // Fizik simülasyonunu başlangıçta kapat; OnConstruction ağırlığa göre
-  // ayarlar.
+  ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+  ItemMesh->SetCollisionResponseToAllChannels(ECR_Block);
+  ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+  ItemMesh->SetGenerateOverlapEvents(true);
   ItemMesh->SetSimulatePhysics(false);
 }
 
 void AItemBase::OnConstruction(const FTransform &Transform) {
   Super::OnConstruction(Transform);
 
-  // Seçilen bir DataTable ve Satır var mı diye kontrol ediyoruz
-  if (!ItemRowHandle.DataTable || ItemRowHandle.RowName.IsNone()) {
+  if (ItemRowHandle.RowName.IsNone()) {
     return;
   }
 
-  FItemDBRow *RowData =
-      ItemRowHandle.GetRow<FItemDBRow>(TEXT("ItemBase_OnConstruction"));
-  if (!RowData) {
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
+  if (Handle.IsNull()) {
     return;
   }
 
-  // ---------------------------------------------------------------
-  // 1) Bukalemun: DataTable'dan mesh otomatik yüklenir
-  // ---------------------------------------------------------------
-  if (!RowData->PickupMesh.IsNull()) {
-    UStaticMesh *LoadedMesh = RowData->PickupMesh.LoadSynchronous();
+  // Scope-local resolve only; no raw pointer stored (Zero-Pointer Policy).
+  const FItemDBRow *Row =
+      Handle.GetRow<FItemDBRow>(TEXT("ItemBase::OnConstruction"));
+  if (!Row) {
+    return;
+  }
+
+  if (!Row->PickupMesh.IsNull()) {
+    UStaticMesh *LoadedMesh = Row->PickupMesh.LoadSynchronous();
     if (LoadedMesh) {
       ItemMesh->SetStaticMesh(LoadedMesh);
     }
   }
 
-  // ---------------------------------------------------------------
-  // 2) Fizik entegrasyonu: Ağır eşyalar sabit durur, hafifler yuvarlanır
-  // ---------------------------------------------------------------
-  // ItemWeight > HeavyWeightThreshold (varsayılan: 5 kg) ise fizik kapalı.
-  // Aksi hâlde simülasyon açılır — eşya düşerse döner/kayar.
-  const bool bIsHeavy = (RowData->ItemWeight > HeavyWeightThreshold);
+  const bool bIsHeavy = Row->ItemWeight > HeavyWeightThreshold;
   ItemMesh->SetSimulatePhysics(!bIsHeavy);
 }
 
-bool AItemBase::GetItemData(FItemDBRow &OutItemData) const {
-  if (ItemRowHandle.DataTable && !ItemRowHandle.RowName.IsNone()) {
-    FItemDBRow *RowData =
-        ItemRowHandle.GetRow<FItemDBRow>(TEXT("ItemBase_GetItemData"));
-    if (RowData) {
-      OutItemData = *RowData;
-      return true;
-    }
-  }
-  return false;
-}
-
 void AItemBase::Interact(AGercekCharacter *Player) {
-  // Oyuncu geçerliliğini doğrula
-  if (!IsValid(Player)) {
+  if (!IsValid(Player) || ItemRowHandle.RowName.IsNone()) {
     return;
   }
 
-  // DataTable verisini çek
-  if (!ItemRowHandle.DataTable || ItemRowHandle.RowName.IsNone()) {
-    return;
-  }
-
-  FItemDBRow *RowData =
-      ItemRowHandle.GetRow<FItemDBRow>(TEXT("ItemBase_Interact"));
-  if (!RowData) {
-    return;
-  }
-
-  // Oyuncunun envanter bileşenini bul — handle-based add (Zero-Pointer Policy).
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
   UInventoryComponent *Inventory =
       Player->FindComponentByClass<UInventoryComponent>();
-  if (IsValid(Inventory)) {
-    Inventory->AddItem(ItemRowHandle, 1);
+  if (IsValid(Inventory) && Inventory->AddItem(Handle, 1)) {
+    Destroy();
   }
+}
 
-  // Eşyayı dünyadan sil
-  Destroy();
+void AItemBase::OnInteract_Implementation(AGercekCharacter *Player) {
+  Interact(Player);
+}
+
+FText AItemBase::GetInteractableName_Implementation() {
+  if (ItemRowHandle.RowName.IsNone()) {
+    return FText::GetEmpty();
+  }
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
+  const FItemDBRow *Row =
+      Handle.GetRow<FItemDBRow>(TEXT("ItemBase::GetInteractableName"));
+  if (!Row || Row->ItemName.IsEmpty()) {
+    return FText::GetEmpty();
+  }
+  return Row->ItemName;
+}
+
+FDataTableRowHandle AItemBase::GetItemData_Implementation() {
+  return BuildPostApocHandle(ItemRowHandle.RowName);
 }

@@ -16,6 +16,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interactable.h"
 #include "InventoryComponent.h"
+#include "InventoryWidget.h"
 #include "TimerManager.h"
 
 // Sets default values
@@ -533,12 +534,17 @@ void AGercekCharacter::Interact() {
     InteractWidget->SetVisibility(ESlateVisibility::Hidden);
   }
 
-  // If the inventory widget is open, trigger a UI refresh.
+  // If the inventory widget is open, trigger a UI refresh (type-safe).
   if (IsValid(InventoryWidget)) {
-    UFunction *RefreshFunc =
-        InventoryWidget->FindFunction(TEXT("RefreshInventory"));
-    if (RefreshFunc) {
-      InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
+    if (UInventoryWidget *TypedInventoryWidget =
+            Cast<UInventoryWidget>(InventoryWidget)) {
+      TypedInventoryWidget->RefreshInventory();
+    } else {
+      UFunction *RefreshFunc =
+          InventoryWidget->FindFunction(TEXT("RefreshInventory"));
+      if (RefreshFunc) {
+        InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
+      }
     }
   }
 }
@@ -557,7 +563,10 @@ void AGercekCharacter::ToggleInventory() {
     InventoryWidget =
         CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
     if (IsValid(InventoryWidget)) {
-      // Görünmez olarak viewport'a ekle; Visibility ile aç/kapat.
+      if (UInventoryWidget *TypedInventoryWidget =
+              Cast<UInventoryWidget>(InventoryWidget)) {
+        TypedInventoryWidget->SetInventoryComponent(InventoryComponent);
+      }
       InventoryWidget->AddToViewport(10);
       InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
     }

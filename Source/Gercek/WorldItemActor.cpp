@@ -64,7 +64,8 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
     return;
   }
 
-  // Handle-based add: no raw pointers. Safe for World Partition (no dangling refs).
+  // Handle-based add: no raw pointers. Safe for World Partition (no dangling
+  // refs).
   if (Inventory->AddItem(ItemRowHandle, 1)) {
     Destroy();
   } else {
@@ -91,12 +92,9 @@ FText AWorldItemActor::GetInteractableName_Implementation() {
 }
 
 // ---------------------------------------------------------------------------
-// IInteractable — Return the full data row for external systems.
+// IInteractable — Return handle only (Zero-Pointer). PostApocItems tablosu
+// WorldItemActor'da editörde atanır; handle aynen döndürülür.
 // ---------------------------------------------------------------------------
-FItemDBRow AWorldItemActor::GetItemData_Implementation() {
-  const FItemDBRow *Row = ResolveRow(ItemRowHandle);
-  if (Row) {
-    return *Row;
-  }
-  return FItemDBRow{}; // default/empty row
+FDataTableRowHandle AWorldItemActor::GetItemData_Implementation() {
+  return ItemRowHandle;
 }

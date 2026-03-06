@@ -11,25 +11,22 @@ void AConsumableItem::Interact(AGercekCharacter *Player) {
     return;
   }
 
-  // Tüketilebilir etkileşim akışı:
-  // ItemType'a göre ya doğrudan kullan (Food/Med), ya da çantaya ekle.
-  FItemDBRow ItemData;
-  if (GetItemData(ItemData)) {
-    // Yiyecek ve İlaç tipindeki eşyalar anında kullanılabilir.
-    // Diğer tüketilebilirler (Ammo vb.) envanterе gider.
-    if (ItemData.ItemType == EItemType::Food ||
-        ItemData.ItemType == EItemType::Med) {
-      // Oynacunun consume fonksiyonunu tetikle
-      // ItemWeight değerini etki miktarı olarak kullanıyoruz (geçici; ileride
-      // FItemDBRow'a HealAmount alanı eklenince değiştir).
-      Player->ConsumeItem(ItemData.ItemType, ItemData.ItemWeight);
+  const FDataTableRowHandle Handle = GetItemData_Implementation();
+  if (Handle.IsNull()) {
+    return;
+  }
 
-      // Dünyadan sil — kullanıldı
-      Destroy();
-    } else {
-      // Çantaya at (base sınıfın AddItem + Destroy akışı)
-      Super::Interact(Player);
-    }
+  const FItemDBRow *Row =
+      Handle.GetRow<FItemDBRow>(TEXT("ConsumableItem::Interact"));
+  if (!Row) {
+    return;
+  }
+
+  if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med) {
+    Player->ConsumeItem(Row->ItemType, Row->ItemWeight);
+    Destroy();
+  } else {
+    Super::Interact(Player);
   }
 }
 

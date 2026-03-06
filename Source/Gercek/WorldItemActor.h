@@ -29,7 +29,7 @@ public:
   virtual void
   OnInteract_Implementation(class AGercekCharacter *Player) override;
   virtual FText GetInteractableName_Implementation() override;
-  virtual FItemDBRow GetItemData_Implementation() override;
+  virtual FDataTableRowHandle GetItemData_Implementation() override;
 
 protected:
   // Physical mesh in the world
