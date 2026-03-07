@@ -32,25 +32,27 @@ class GERCEK_API UInventorySlotWidget : public UUserWidget {
 public:
   // ---- BindWidget: Blueprint widget names MUST match exactly ----
 
-  // Eşya görseli
+  // Esya gorseli
   UPROPERTY(meta = (BindWidget))
   class UImage *ItemIcon;
 
-  // Eşya ismi
+  // Esya ismi
   UPROPERTY(meta = (BindWidget))
   class UTextBlock *ItemNameText;
 
-  // Miktar (gizlenir eğer <=1)
+  // Miktar (gizlenir eger <=1)
   UPROPERTY(meta = (BindWidget))
   class UTextBlock *ItemQuantityText;
 
-  // Para/takas değeri
+  // Para/takas degeri
   UPROPERTY(meta = (BindWidget))
   class UTextBlock *ItemValueText;
 
-  // ---- Public API ----
-
-  // DataTable satırından tüm görsel verileri widget'lara basar.
+  // DataTable satirindan tum gorsel verileri widget'lara basar.
   UFUNCTION(BlueprintCallable, Category = "Survival | UI")
   void UpdateSlot(const FItemDBRow &ItemData, int32 Quantity);
+
+  // Bos envanter slotunu cizer.
+  UFUNCTION(BlueprintCallable, Category = "Survival | UI")
+  void SetEmptySlot();
 };

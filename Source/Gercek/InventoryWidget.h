@@ -23,7 +23,7 @@
  *   3. Set SlotWidgetClass to your WBP_InventorySlot asset.
  *
  * C++ automatically binds to InventoryComponent::OnInventoryUpdated
- * and rebuilds the grid on every change — no Blueprint event graph needed.
+ * and rebuilds the grid on every change -- no Blueprint event graph needed.
  */
 UCLASS(Abstract)
 class GERCEK_API UInventoryWidget : public UUserWidget {
@@ -34,6 +34,11 @@ public:
   UPROPERTY(meta = (BindWidget))
   class UWrapBox *InventoryGrid;
 
+  // UI'da her zaman gosterilecek sabit slot sayisi.
+  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Survival | UI",
+            meta = (ClampMin = "1"))
+  int32 FixedSlotCount = 12;
+
   // Set this in the Blueprint CDO to the WBP_InventorySlot asset.
   UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Survival | UI")
   TSubclassOf<UInventorySlotWidget> SlotWidgetClass;
@@ -43,7 +48,7 @@ public:
   UFUNCTION(BlueprintCallable, Category = "Survival | UI")
   void SetInventoryComponent(UInventoryComponent *InInventory);
 
-  // Clears InventoryGrid, then rebuilds one slot per FInventorySlot entry.
+  // Clears InventoryGrid, then rebuilds fixed-size slot list.
   // Must be UFUNCTION for AddDynamic binding.
   UFUNCTION(BlueprintCallable, Category = "Survival | UI")
   void RefreshInventory();
@@ -53,7 +58,7 @@ protected:
   virtual void NativeDestruct() override;
 
 private:
-  // Cached reference — bound during SetInventoryComponent.
+  // Cached reference -- bound during SetInventoryComponent.
   UPROPERTY()
   UInventoryComponent *InventoryComponent = nullptr;
   // Note: AddDynamic does not return a FDelegateHandle.

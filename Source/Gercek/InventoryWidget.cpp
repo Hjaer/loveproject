@@ -6,14 +6,14 @@
 #include "InventorySlotWidget.h"
 
 // ---------------------------------------------------------------------------
-// NativeConstruct — called when the widget is added to the viewport.
+// NativeConstruct -- called when the widget is added to the viewport.
 // We do NOT bind here because InventoryComponent may not be set yet.
 // SetInventoryComponent() handles the bind on demand.
 // ---------------------------------------------------------------------------
 void UInventoryWidget::NativeConstruct() { Super::NativeConstruct(); }
 
 // ---------------------------------------------------------------------------
-// NativeDestruct — safely unbind so we don't hold a stale callback.
+// NativeDestruct -- safely unbind so we don't hold a stale callback.
 // ---------------------------------------------------------------------------
 void UInventoryWidget::NativeDestruct() {
   if (InventoryComponent) {
@@ -38,7 +38,7 @@ void UInventoryWidget::SetInventoryComponent(UInventoryComponent *InInventory) {
   InventoryComponent = InInventory;
 
   if (InventoryComponent) {
-    // DYNAMIC multicast delegates require AddDynamic — not AddUObject.
+    // DYNAMIC multicast delegates require AddDynamic -- not AddUObject.
     InventoryComponent->OnInventoryUpdated.AddDynamic(
         this, &UInventoryWidget::RefreshInventory);
 
@@ -48,7 +48,7 @@ void UInventoryWidget::SetInventoryComponent(UInventoryComponent *InInventory) {
 }
 
 // ---------------------------------------------------------------------------
-// RefreshInventory — rebuilds the grid from scratch.
+// RefreshInventory -- always renders fixed-size slot list.
 // Called automatically via delegate binding; can also be called from Blueprint.
 // ---------------------------------------------------------------------------
 void UInventoryWidget::RefreshInventory() {
@@ -62,34 +62,45 @@ void UInventoryWidget::RefreshInventory() {
   // 1. Clear previous slots.
   InventoryGrid->ClearChildren();
 
-  if (!InventoryComponent || !SlotWidgetClass) {
+  if (!SlotWidgetClass) {
     return;
   }
 
-  // 2. Iterate inventory and create one slot widget per entry.
-  TArray<FInventorySlot> Slots = InventoryComponent->GetInventoryForUI();
-  for (const FInventorySlot &CurrentSlot : Slots) {
-    if (!CurrentSlot.IsValid())
-      continue;
+  TArray<FInventorySlot> Slots;
+  if (InventoryComponent) {
+    Slots = InventoryComponent->GetInventoryForUI();
+  }
 
-    const FItemDBRow *Row = CurrentSlot.GetRow();
-    if (!Row)
-      continue;
+  const int32 SafeFixedSlotCount = FMath::Max(1, FixedSlotCount);
+  const int32 OccupiedSlotCount = Slots.Num();
 
-    // Create the slot widget using our designer-selected Blueprint subclass.
+  // 2. Create fixed number of UI slots (default: 12).
+  for (int32 SlotIndex = 0; SlotIndex < SafeFixedSlotCount; ++SlotIndex) {
     UInventorySlotWidget *SlotWidget =
         CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), SlotWidgetClass);
-    if (!SlotWidget)
+    if (!SlotWidget) {
       continue;
+    }
 
-    // Push data.
-    SlotWidget->UpdateSlot(*Row, CurrentSlot.Quantity);
+    if (SlotIndex < OccupiedSlotCount) {
+      const FInventorySlot &CurrentSlot = Slots[SlotIndex];
+      const FItemDBRow *Row = CurrentSlot.GetRow();
 
-    // Add to grid.
+      if (CurrentSlot.IsValid() && Row) {
+        SlotWidget->UpdateSlot(*Row, CurrentSlot.Quantity);
+      } else {
+        SlotWidget->SetEmptySlot();
+      }
+    } else {
+      SlotWidget->SetEmptySlot();
+    }
+
     InventoryGrid->AddChildToWrapBox(SlotWidget);
   }
 
-  UE_LOG(LogTemp, Log,
-         TEXT("[InventoryWidget] Refreshed: %d slot(s) displayed."),
-         Slots.Num());
+  if (OccupiedSlotCount > SafeFixedSlotCount) {
+    UE_LOG(LogTemp, Warning,
+           TEXT("[InventoryWidget] %d item slot not shown (fixed UI slots: %d)."),
+           OccupiedSlotCount - SafeFixedSlotCount, SafeFixedSlotCount);
+  }
 }
