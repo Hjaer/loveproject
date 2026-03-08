@@ -59,4 +59,42 @@ void AProceduralBuilding::OnConstruction(const FTransform &Transform) {
       BuildingSpline->SetSplinePointType(i, ESplinePointType::Linear);
     }
   }
+
+  // --- YENİ SİSTEM: ÜST KATLARI İNŞA ET (Asansör Mantığı) ---
+  // i=1'den başlıyoruz çünkü 0. katı (Zemin) yukarıda BuildingSpline zaten
+  // çizdi.
+  for (int32 i = 1; i < NumberOfFloors; i++) {
+    // Her kat için havada yepyeni bir çizgi (Spline) oluştur
+    USplineComponent *NewFloorSpline = NewObject<USplineComponent>(this);
+    NewFloorSpline->CreationMethod =
+        EComponentCreationMethod::UserConstructionScript;
+    NewFloorSpline->SetupAttachment(RootComponent);
+    NewFloorSpline->SetClosedLoop(true);
+    NewFloorSpline->RegisterComponent();
+
+    // Bu katın yerden yüksekliğini hesapla (Örn: 2. kat = 2 * 319 = 638 santim
+    // yukarıda)
+    float Z_Yukseklik = i * FloorHeight;
+
+    // Noktaları bu yeni yüksekliğe (Z_Yukseklik) göre yerleştir
+    NewFloorSpline->ClearSplinePoints();
+    NewFloorSpline->AddSplinePoint(FVector(0, 0, Z_Yukseklik),
+                                   ESplineCoordinateSpace::Local);
+    NewFloorSpline->AddSplinePoint(FVector(AksamayanGenislik, 0, Z_Yukseklik),
+                                   ESplineCoordinateSpace::Local);
+    NewFloorSpline->AddSplinePoint(
+        FVector(AksamayanGenislik, AksamayanUzunluk, Z_Yukseklik),
+        ESplineCoordinateSpace::Local);
+    NewFloorSpline->AddSplinePoint(FVector(0, AksamayanUzunluk, Z_Yukseklik),
+                                   ESplineCoordinateSpace::Local);
+
+    // Köşeleri dik açı (90 derece) yap
+    for (int32 pointIdx = 0;
+         pointIdx < NewFloorSpline->GetNumberOfSplinePoints(); pointIdx++) {
+      NewFloorSpline->SetSplinePointType(pointIdx, ESplinePointType::Linear);
+    }
+
+    // Bir sonraki güncellemede silebilmek için listeye ekle
+    FloorSplines.Add(NewFloorSpline);
+  }
 }
