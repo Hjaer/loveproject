@@ -14,7 +14,8 @@ AProceduralBuilding::AProceduralBuilding() {
   BuildingSpline->SetClosedLoop(
       true); // Odanın 4. duvarını (sonunu) otomatik kapatır
 
-  // 2. PCG bileşenini oluştur ve Spline'ın içine (Root'a) bağla
+  // 2. PCG bileşenini oluştur (PCG mantıksal bir bileşen olduğu için
+  // SetupAttachment KULLANILMAZ)
   PCGComponent = CreateDefaultSubobject<UPCGComponent>(TEXT("PCGComponent"));
 }
 
@@ -23,19 +24,33 @@ AProceduralBuilding::AProceduralBuilding() {
 void AProceduralBuilding::OnConstruction(const FTransform &Transform) {
   Super::OnConstruction(Transform);
 
+  // --- YENİ AKILLI SİSTEM: Girilen değeri otomatik olarak duvar genişliğine
+  // (300'e) yuvarlar --- (Örneğin sen 1000 yazsan bile kod onu otomatik 900'e
+  // çeker, böylece duvarlar asla çatlamaz)
+  float GercekDuvarGenisligi = 300.0f;
+  float AksamayanGenislik =
+      FMath::GridSnap(BuildingWidth, GercekDuvarGenisligi);
+  float AksamayanUzunluk =
+      FMath::GridSnap(BuildingLength, GercekDuvarGenisligi);
+
+  // Sıfır olmasını engellemek için binaya en az 1 duvar boyutu (300) veriyoruz
+  AksamayanGenislik = FMath::Max(GercekDuvarGenisligi, AksamayanGenislik);
+  AksamayanUzunluk = FMath::Max(GercekDuvarGenisligi, AksamayanUzunluk);
+
   if (BuildingSpline) {
     // Önce eski çizgi noktalarını tamamen temizle (Yoksa üst üste binerler)
     BuildingSpline->ClearSplinePoints();
 
-    // Genişlik ve Uzunluk ayarlarına göre 4 yeni köşe noktası ekle
-    // (Kare/Dikdörtgen oluştur)
+    // Genişlik ve Uzunluk ayarlarına göre 4 yeni köşe noktası ekle (Akıllı
+    // hesaplanmış değerleri kullanıyoruz)
     BuildingSpline->AddSplinePoint(FVector(0, 0, 0),
                                    ESplineCoordinateSpace::Local);
-    BuildingSpline->AddSplinePoint(FVector(BuildingWidth, 0, 0),
+    BuildingSpline->AddSplinePoint(FVector(AksamayanGenislik, 0, 0),
                                    ESplineCoordinateSpace::Local);
-    BuildingSpline->AddSplinePoint(FVector(BuildingWidth, BuildingLength, 0),
-                                   ESplineCoordinateSpace::Local);
-    BuildingSpline->AddSplinePoint(FVector(0, BuildingLength, 0),
+    BuildingSpline->AddSplinePoint(
+        FVector(AksamayanGenislik, AksamayanUzunluk, 0),
+        ESplineCoordinateSpace::Local);
+    BuildingSpline->AddSplinePoint(FVector(0, AksamayanUzunluk, 0),
                                    ESplineCoordinateSpace::Local);
 
     // Çizgilerin kavisli (yuvarlak) olmasını engelle, köşeleri tam 90 derece
