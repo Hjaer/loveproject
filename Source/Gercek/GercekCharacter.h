@@ -60,7 +60,7 @@ protected:
   FTimerHandle StaminaBuffTimerHandle;
 
   // Hayatta Kalma Özellikleri (Survival Attributes)
-  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Survival")
   float Health;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
@@ -72,19 +72,19 @@ protected:
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
   float MaxRadiation = 100.0f;
 
-  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Survival")
   float Hunger;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
   float MaxHunger = 100.0f;
 
-  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Survival")
   float Thirst;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
   float MaxThirst = 100.0f;
 
-  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Survival")
   float Stamina;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival")

@@ -32,6 +32,18 @@ public:
   UPROPERTY(EditAnywhere, Category = "Bina Ayarlari")
   float BuildingLength = 1500.0f; // Varsayılan 15 Metre
 
+  // Kaç katlı olacağı
+  UPROPERTY(EditAnywhere, Category = "Bina Ayarlari")
+  int32 NumberOfFloors = 1; // Varsayılan 1 kat (Sadece zemin)
+
+  // Kat yüksekliği (Santimetre cinsinden)
+  UPROPERTY(EditAnywhere, Category = "Bina Ayarlari")
+  float FloorHeight = 300.0f; // Varsayılan 3 Metre
+
+  // Üst katların splinelerini tutacağımız dizi
+  UPROPERTY()
+  TArray<USplineComponent*> FloorSplines;
+
   // Editörde bir değeri değiştirdiğimizde (Örn: Genişliği artırdığımızda)
   // anında çalışacak olan özel fonksiyon
   virtual void OnConstruction(const FTransform &Transform) override;

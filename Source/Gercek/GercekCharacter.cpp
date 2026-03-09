@@ -18,6 +18,8 @@
 #include "InventoryComponent.h"
 #include "InventoryWidget.h"
 #include "TimerManager.h"
+// Replication için gerekli include (EKLEME)
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 AGercekCharacter::AGercekCharacter() {
@@ -93,6 +95,21 @@ AGercekCharacter::AGercekCharacter() {
     InjuredSpeed = 150.0f;       // Can azken walk hızı
     InjuredSprintSpeed = 300.0f; // Can azken sprint hızı
   }
+
+  // --- CO-OP ALTYAPISI (EKLEME) ---
+  bReplicates = true; 
+  SetReplicateMovement(true); 
+}
+
+// --- REPLICATION KAYIT FONKSİYONU (EKLEME) ---
+void AGercekCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AGercekCharacter, Health);
+	DOREPLIFETIME(AGercekCharacter, Stamina);
+	DOREPLIFETIME(AGercekCharacter, Hunger);
+	DOREPLIFETIME(AGercekCharacter, Thirst);
 }
 
 // Called when the game starts or when spawned
