@@ -97,19 +97,19 @@ AGercekCharacter::AGercekCharacter() {
   }
 
   // --- CO-OP ALTYAPISI (EKLEME) ---
-  bReplicates = true; 
-  SetReplicateMovement(true); 
+  bReplicates = true;
+  SetReplicateMovement(true);
 }
 
 // --- REPLICATION KAYIT FONKSİYONU (EKLEME) ---
-void AGercekCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+void AGercekCharacter::GetLifetimeReplicatedProps(
+    TArray<FLifetimeProperty> &OutLifetimeProps) const {
+  Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(AGercekCharacter, Health);
-	DOREPLIFETIME(AGercekCharacter, Stamina);
-	DOREPLIFETIME(AGercekCharacter, Hunger);
-	DOREPLIFETIME(AGercekCharacter, Thirst);
+  DOREPLIFETIME(AGercekCharacter, Health);
+  DOREPLIFETIME(AGercekCharacter, Stamina);
+  DOREPLIFETIME(AGercekCharacter, Hunger);
+  DOREPLIFETIME(AGercekCharacter, Thirst);
 }
 
 // Called when the game starts or when spawned
@@ -175,115 +175,144 @@ void AGercekCharacter::Tick(float DeltaTime) {
         FString::Printf(TEXT("STAMINA: %.1f"), Stamina));
   }
 
-  // Zamanla açlık ve susuzluk azalması
-  if (Hunger > 0.0f) {
-    Hunger -= DeltaTime * HungerDecreaseRate;
-    Hunger = FMath::Clamp(Hunger, 0.0f, 100.0f);
-  }
-
-  if (Thirst > 0.0f) {
-    Thirst -= DeltaTime * ThirstDecreaseRate;
-    Thirst = FMath::Clamp(Thirst, 0.0f, 100.0f);
-  }
-
-  // Tokluk İyileşmesi (Hem Açlık hem Susuzluk %90 üzerindeyse canı artır)
-  if (Hunger > 90.0f && Thirst > 90.0f) {
-    Health += 0.5f * DeltaTime;
-    Health = FMath::Clamp(Health, 0.0f, 100.0f);
-  }
-
-  // Zıplama kısıtlaması (Can 25'ten azsa çift zıplama kapatılır)
-  if (Health < 25.0f) {
-    JumpMaxCount = 1;
-  } else {
-    JumpMaxCount = 2; // Veya projedeki varsayılan değer neyse onu kullanın
-  }
-
-  // Stamina yönetimi ve Koşma mantığı
-  if (bIsSprinting && GetVelocity().SizeSquared() > 0 && !bIsExhausted) {
-    // 15 ile 0 arasında stamina düşüşünü yavaşlat (saniyede 5 birim)
-    float CurrentDepletionRate =
-        (Stamina < 15.0f) ? 5.0f : StaminaDepletionRate;
-    Stamina -= DeltaTime * CurrentDepletionRate;
-    Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
-
-    if (Stamina <= 0.0f) {
-      Stamina = 0.0f;
-      bIsExhausted = true;
-      bIsRecovering = true;
-      RecoveryDelayTimer =
-          1.5f; // Tam bitkinlik durumunda 1.5 saniye bekleme cezası
+  // Sunucu (Server) yetkili stat güncellemeleri
+  if (HasAuthority()) {
+    // Zamanla açlık ve susuzluk azalması
+    if (Hunger > 0.0f) {
+      Hunger -= DeltaTime * HungerDecreaseRate;
+      Hunger = FMath::Clamp(Hunger, 0.0f, 100.0f);
+    } else {
+      // Açlık 0'a ulaştığında, can (Health) her 12 saniyede 1 birim azalmalıdır
+      // (Dakikada 5 can).
+      Health -= (1.0f / 12.0f) * DeltaTime;
+      Health = FMath::Clamp(Health, 0.0f, MaxHealth);
     }
-  } else {
-    // Stamina Yenilenmesi
-    float TimeSinceLastJump = GetWorld()->GetTimeSeconds() - LastJumpTime;
 
-    if (Stamina < MaxStamina && TimeSinceLastJump > 1.0f) {
-
-      // Eğer bekleme süresindeysek sadece sayacı azalt ve doluma izin verme
-      if (bIsRecovering) {
-        RecoveryDelayTimer -= DeltaTime;
-        if (RecoveryDelayTimer <= 0.0f) {
-          bIsRecovering = false; // Süre doldu, artık doluma başlayabiliriz
-        }
-      } else {
-        // Kademeli Artış (Stamina dolarken mevcut değeri kontrol et)
-        float CurrentRegenRate = StaminaRecoveryRate; // Normal hız (Örn: 10)
-
-        // Kritik Bölge: Eğer 20'nin altındaysa çok daha yavaş dolar (Örn: Kilit
-        // açılana kadar eziyet)
-        if (Stamina < 20.0f) {
-          CurrentRegenRate = 5.0f;
-        }
-
-        Stamina += DeltaTime * CurrentRegenRate;
-        Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
-
-        // Kilit Mekanizması: 21 birime ulaşana kadar karakter yorgunluktan
-        // kurtulamaz
-        if (Stamina >= 21.0f) {
-          bIsExhausted = false;
-          bIsFatigued = false;
-        }
-      }
+    if (Thirst > 0.0f) {
+      Thirst -= DeltaTime * ThirstDecreaseRate;
+      Thirst = FMath::Clamp(Thirst, 0.0f, 100.0f);
     }
-  }
 
-  // ==== HAREKET HIZI (SPEED) YÖNETİMİ ====
-  if (GetCharacterMovement()) {
-    float TargetSpeed = BaseWalkSpeed;
+    // Radyasyon: Sunucuda hesaplanan radyasyon seviyesi 50'yi geçtiğinde can
+    // kademeli azalmalıdır.
+    if (Radiation > 50.0f) {
+      // Kademeli azalma hızı - Saniyede 0.5 can
+      Health -= 0.5f * DeltaTime;
+      Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+    }
 
-    // Can durumuna göre hedef hızı belirle
-    if (bIsConsuming) {
-      TargetSpeed = BaseWalkSpeed / 2.0f; // İçerken hız yarıya düşer
-    } else if (Health < 25.0f) {
-      // Yaralı durumu
-      if (bIsSprinting && !bIsExhausted) {
-        TargetSpeed = (Stamina > 20.0f) ? InjuredSprintSpeed : InjuredSpeed;
-      } else {
-        TargetSpeed = InjuredSpeed;
+    // Tokluk İyileşmesi (Hem Açlık hem Susuzluk %75 üzerindeyse ve Radyasyon
+    // düşükse canı artır)
+    if (Hunger > 75.0f && Thirst > 75.0f && Radiation <= 20.0f) {
+      Health += 0.5f * DeltaTime;
+      Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+    }
+
+    // Zıplama kısıtlaması (Can 25'ten azsa çift zıplama kapatılır)
+    if (Health < 25.0f) {
+      JumpMaxCount = 1;
+    } else {
+      JumpMaxCount = 2; // Veya projedeki varsayılan değer neyse onu kullanın
+    }
+
+    // Stamina yönetimi ve Koşma mantığı
+    if (bIsSprinting && GetVelocity().SizeSquared() > 0 && !bIsExhausted) {
+      // 15 ile 0 arasında stamina düşüşünü yavaşlat (saniyede 5 birim)
+      float CurrentDepletionRate =
+          (Stamina < 15.0f) ? 5.0f : StaminaDepletionRate;
+      Stamina -= DeltaTime * CurrentDepletionRate;
+      Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
+
+      if (Stamina <= 0.0f) {
+        Stamina = 0.0f;
+        bIsExhausted = true;
+        bIsRecovering = true;
+        RecoveryDelayTimer =
+            1.50f; // Tam bitkinlik durumunda 1.50 saniye bekleme cezası
       }
     } else {
-      // Normal durum - Kademe Mantığı
-      if (bIsExhausted) {
-        TargetSpeed =
-            300.0f; // 0 Noktası ve bekleme süresi: Mecburi Yürüme kilitli
-      } else if (bIsSprinting && Stamina >= 21.0f) {
-        TargetSpeed = 600.0f; // 21-100: Koşu
-      } else if (bIsSprinting && Stamina > 0.0f && Stamina < 21.0f) {
-        TargetSpeed = 400.0f; // 1-20: Yorgun Koşu
-      } else {
-        TargetSpeed = 300.0f; // Varsayılan yürüme
+      // Stamina Yenilenmesi
+      float TimeSinceLastJump = GetWorld()->GetTimeSeconds() - LastJumpTime;
+
+      if (Stamina < MaxStamina && TimeSinceLastJump > 1.0f) {
+
+        // Eğer bekleme süresindeysek sadece sayacı azalt ve doluma izin verme
+        if (bIsRecovering) {
+          RecoveryDelayTimer -= DeltaTime;
+          if (RecoveryDelayTimer <= 0.0f) {
+            bIsRecovering = false; // Süre doldu, artık doluma başlayabiliriz
+          }
+        } else {
+          // Kademeli Artış (Stamina dolarken mevcut değeri kontrol et)
+          float CurrentRegenRate = StaminaRecoveryRate; // Normal hız (Örn: 10)
+
+          // Kritik Bölge: Eğer 20'nin altındaysa çok daha yavaş dolar
+          if (Stamina < 20.0f) {
+            CurrentRegenRate = 5.0f;
+          }
+
+          Stamina += DeltaTime * CurrentRegenRate;
+          Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
+
+          // Kilit Mekanizması: 21 birime ulaşana kadar karakter yorgunluktan
+          // kurtulamaz
+          if (Stamina >= 21.0f) {
+            bIsExhausted = false;
+            bIsFatigued = false;
+          }
+        }
       }
     }
 
-    // FInterpTo ile anlık hızı hedef hıza yumuşak (smooth) şekilde 3.0f hızıyla
-    // geçir
-    float CurrentSpeed = GetCharacterMovement()->MaxWalkSpeed;
-    TargetSpeed *= MovementSpeedMultiplier; // Agirlik kaynakli hiz kancasi
-    GetCharacterMovement()->MaxWalkSpeed =
-        FMath::FInterpTo(CurrentSpeed, TargetSpeed, DeltaTime,
-                         3.0f); // 3.0f geçiş hızı, sert kilit kaldırıldı.
+    // ==== HAREKET HIZI (SPEED) YÖNETİMİ ====
+    if (GetCharacterMovement()) {
+      float TargetSpeed = BaseWalkSpeed;
+
+      // Can durumuna göre hedef hızı belirle
+      if (bIsConsuming) {
+        TargetSpeed = BaseWalkSpeed / 2.0f; // İçerken hız yarıya düşer
+      } else if (Health < 25.0f) {
+        // Yaralı durumu
+        if (bIsSprinting && !bIsExhausted) {
+          TargetSpeed = (Stamina > 20.0f) ? InjuredSprintSpeed : InjuredSpeed;
+        } else {
+          TargetSpeed = InjuredSpeed;
+        }
+      } else {
+        // Normal durum - Kademe Mantığı
+        if (bIsExhausted) {
+          TargetSpeed =
+              300.0f; // 0 Noktası ve bekleme süresi: Mecburi Yürüme kilitli
+        } else if (bIsSprinting && Stamina >= 21.0f) {
+          TargetSpeed = 600.0f; // 21-100: Koşu
+        } else if (bIsSprinting && Stamina > 0.0f && Stamina < 21.0f) {
+          TargetSpeed = 400.0f; // 1-20: Yorgun Koşu
+        } else {
+          TargetSpeed = 300.0f; // Varsayılan yürüme
+        }
+      }
+
+      // Stamina cezası 1: Stamina 20'nin altına düştüğünde yürüme hızı otomatik
+      // olarak %30 yavaşlatılır. Eger exhausted (0 stamina kilitli ceza) ise
+      // zaten 300'e sabitlenecektir.
+      if (Stamina < 20.0f && !bIsExhausted && TargetSpeed > 0) {
+        TargetSpeed *= 0.7f;
+      }
+
+      float CurrentSpeed = GetCharacterMovement()->MaxWalkSpeed;
+      TargetSpeed *= MovementSpeedMultiplier; // Agirlik kaynakli hiz kancasi
+
+      if (bIsExhausted) {
+        // Stamina cezasi 2: 1.55 saniye boyunca karakter hizi %100 ceza 300'e
+        // (agirhk carpanindan sonra) sabitlenir. Interp kullanılmaz, anında
+        // kilitlenir.
+        GetCharacterMovement()->MaxWalkSpeed = TargetSpeed;
+      } else {
+        // FInterpTo ile anlık hızı hedef hıza yumuşak (smooth) şekilde geçir
+        GetCharacterMovement()->MaxWalkSpeed =
+            FMath::FInterpTo(CurrentSpeed, TargetSpeed, DeltaTime, 3.0f);
+      }
+    }
   }
 
   // ==== DİNAMİK FOV ====
@@ -716,6 +745,12 @@ void AGercekCharacter::ConsumeItem(EItemType Type, float Amount) {
 
 void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {
   bIsConsuming = false;
+
+  // Denge: Tüm stat artışları (yiyecek, tıbbi kit) sadece Sunucu (Server)
+  // üzerinde HasAuthority() kontrolü ile yapılmalıdır.
+  if (!HasAuthority()) {
+    return;
+  }
 
   switch (Type) {
   case EItemType::Food:
