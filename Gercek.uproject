@@ -40,6 +40,10 @@
 		{
 			"Name": "PCGBiomeSample",
 			"Enabled": true
+		},
+		{
+			"Name": "OnlineSubsystemSteam",
+			"Enabled": true
 		}
 	]
 }
