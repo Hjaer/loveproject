@@ -22,7 +22,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete,
  * AAA oyunlardaki "Çöpçatanlık" (Matchmaking) servisleri gibi gizli bir hizmetçidir.
  * Level değişse bile ölmez, bu yüzden ağ (network) ve oturum (session) işlemleri için en güvenilir yerdir.
  */
-UCLASS()
+UCLASS(BlueprintType)
 class GERCEK_API UMultiplayerSessionSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
