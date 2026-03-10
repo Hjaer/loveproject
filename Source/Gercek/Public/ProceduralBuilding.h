@@ -17,8 +17,8 @@ public:
   AProceduralBuilding();
 
   // Binanın temelini çizecek olan Spline (Çizgi) bileşeni
-  // UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bina Bilesenleri")
-  // USplineComponent *BuildingSpline;
+  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bina Bilesenleri")
+  USplineComponent *BuildingSpline;
 
   // Duvarları dikecek olan PCG bileşeni
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bina Bilesenleri")

@@ -65,6 +65,15 @@ void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bo
 		UWorld* World = GetWorld();
 		if (World)
 		{
+			// Input Modunu ve Fare imlecini oyuna geri dondur!
+			APlayerController* PlayerController = World->GetFirstPlayerController();
+			if (PlayerController)
+			{
+				FInputModeGameOnly InputModeData;
+				PlayerController->SetInputMode(InputModeData);
+				PlayerController->bShowMouseCursor = false;
+			}
+
 			World->ServerTravel("/Game/FirstPerson/Lvl_FirstPerson?listen");
 		}
 	}

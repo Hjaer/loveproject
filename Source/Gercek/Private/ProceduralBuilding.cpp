@@ -8,11 +8,11 @@ AProceduralBuilding::AProceduralBuilding() {
   PrimaryActorTick.bCanEverTick = false;
 
   // 1. Spline (Çizgi) bileşenini oluştur ve ana merkez (Root) yap
-  // BuildingSpline =
-  //    CreateDefaultSubobject<USplineComponent>(TEXT("BuildingSpline"));
-  // RootComponent = BuildingSpline;
-  // BuildingSpline->SetClosedLoop(
-  //    true); // Odanın 4. duvarını (sonunu) otomatik kapatır
+  BuildingSpline =
+      CreateDefaultSubobject<USplineComponent>(TEXT("BuildingSpline"));
+  RootComponent = BuildingSpline;
+  BuildingSpline->SetClosedLoop(
+      true); // Odanın 4. duvarını (sonunu) otomatik kapatır
 
   // 2. PCG bileşenini oluştur (PCG mantıksal bir bileşen olduğu için
   // SetupAttachment KULLANILMAZ)
@@ -37,7 +37,6 @@ void AProceduralBuilding::OnConstruction(const FTransform &Transform) {
   AksamayanGenislik = FMath::Max(GercekDuvarGenisligi, AksamayanGenislik);
   AksamayanUzunluk = FMath::Max(GercekDuvarGenisligi, AksamayanUzunluk);
 
-  /* 
   if (BuildingSpline) {
     // Önce eski çizgi noktalarını tamamen temizle (Yoksa üst üste binerler)
     BuildingSpline->ClearSplinePoints();
@@ -60,7 +59,6 @@ void AProceduralBuilding::OnConstruction(const FTransform &Transform) {
       BuildingSpline->SetSplinePointType(i, ESplinePointType::Linear);
     }
   }
-  */
 
   // --- YENİ SİSTEM: ÜST KATLARI İNŞA ET (Asansör Mantığı) ---
   // i=1'den başlıyoruz çünkü 0. katı (Zemin) yukarıda BuildingSpline zaten
