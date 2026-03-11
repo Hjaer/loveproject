@@ -31,6 +31,10 @@ public:
   virtual FText GetInteractableName_Implementation() override;
   virtual FDataTableRowHandle GetItemData_Implementation() override;
 
+  // Çantadan yere atıldığında (Spawning) Mesh ve Fiziklerin derhal kurulması için çalışır.
+  UFUNCTION(BlueprintCallable, Category = "Survival Item")
+  void InitializeItemData(const FDataTableRowHandle& InHandle);
+
 protected:
   // Physical mesh in the world
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

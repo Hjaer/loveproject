@@ -98,3 +98,24 @@ FText AWorldItemActor::GetInteractableName_Implementation() {
 FDataTableRowHandle AWorldItemActor::GetItemData_Implementation() {
   return ItemRowHandle;
 }
+
+// ---------------------------------------------------------------------------
+// Initialize Item Data when spawned via Drop (Çantadan atılma durumunda)
+// ---------------------------------------------------------------------------
+void AWorldItemActor::InitializeItemData(const FDataTableRowHandle& InHandle) {
+  ItemRowHandle = InHandle;
+
+  const FItemDBRow *Row = ResolveRow(ItemRowHandle);
+  if (!Row) return;
+
+  if (!Row->PickupMesh.IsNull() && MeshComponent) {
+    UStaticMesh *LoadedMesh = Row->PickupMesh.LoadSynchronous();
+    if (LoadedMesh) {
+      MeshComponent->SetStaticMesh(LoadedMesh);
+      
+      // Eşya ağırlığına göre fizik kuralları
+      const bool bIsHeavy = (Row->ItemWeight > 5.0f);
+      MeshComponent->SetSimulatePhysics(!bIsHeavy);
+    }
+  }
+}

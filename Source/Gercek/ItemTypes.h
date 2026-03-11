@@ -122,4 +122,14 @@ public:
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Upgrade",
             meta = (ClampMin = "0.0"))
   float ExtraCapacity = 0.0f;
+
+  // ---- Flags --------------------------------------------------
+
+  // Kullanılabilir / Tüketilebilir (Yemek, İlaç vb.)
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Flags")
+  bool bCanConsume = false;
+
+  // Kuşanılabilir (Zırh, Silah vb.)
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Flags")
+  bool bCanEquip = false;
 };

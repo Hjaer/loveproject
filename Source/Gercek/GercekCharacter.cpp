@@ -18,6 +18,7 @@
 #include "InventoryComponent.h"
 #include "InventoryWidget.h"
 #include "TimerManager.h"
+#include "WorldItemActor.h"
 // Replication için gerekli include (EKLEME)
 #include "Net/UnrealNetwork.h"
 
@@ -906,4 +907,52 @@ void AGercekCharacter::ShowInventoryDetails() {
     }
     UE_LOG(LogTemp, Log, TEXT("%s"), *Message);
   }
+}
+
+// ==== ÇANTADAN KULLANMA VE YERE ATMA (USE & DROP) ====
+
+void AGercekCharacter::UseItemFromInventory(const FDataTableRowHandle &ItemRowHandle) {
+  if (ItemRowHandle.IsNull() || !InventoryComponent) return;
+
+  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(TEXT("AGercekCharacter::UseItemFromInventory"));
+  if (!Row) return;
+
+  if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med) {
+    // Çantadan 1 adet silmeyi dener
+    if (InventoryComponent->RemoveItem(ItemRowHandle, 1)) {
+      // Amount olarak ItemValue kullan (İyileştirme miktarı)
+      ConsumeItem(Row->ItemType, Row->ItemValue);
+    }
+  } else {
+    UE_LOG(LogTemp, Warning, TEXT("[AGercekCharacter] Tüketilemeyen esya kullanilmaya calisildi: %s"), *Row->ItemName.ToString());
+  }
+}
+
+void AGercekCharacter::DropItemFromInventory(const FDataTableRowHandle &ItemRowHandle) {
+  if (ItemRowHandle.IsNull() || !InventoryComponent) return;
+
+  // Çantadan 1 adet silmeyi dener
+  if (InventoryComponent->RemoveItem(ItemRowHandle, 1)) {
+    if (FpsCameraComponent) {
+      // Karakterin baktığı yöne doğru 100 birim ileriye Drop lokasyonu hesapla
+      FVector DropLocation = FpsCameraComponent->GetComponentLocation() + (FpsCameraComponent->GetForwardVector() * 100.0f);
+      SpawnItemInWorld(ItemRowHandle, DropLocation);
+    }
+  }
+}
+
+AActor* AGercekCharacter::SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle, FVector SpawnLocation) {
+  if (ItemRowHandle.IsNull() || !GetWorld()) return nullptr;
+
+  FActorSpawnParameters SpawnParams;
+  SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+  // AWorldItemActor oluştur 
+  AWorldItemActor* SpawnedItem = GetWorld()->SpawnActor<AWorldItemActor>(AWorldItemActor::StaticClass(), SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+
+  if (SpawnedItem) {
+    SpawnedItem->InitializeItemData(ItemRowHandle);
+  }
+
+  return SpawnedItem;
 }
