@@ -136,4 +136,27 @@ public:
   // Kuşanılabilir (Zırh, Silah vb.)
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Flags")
   bool bCanEquip = false;
+
+  // ---- PostApoc Envanter Sistemi ---------------------------
+
+  // Envanterde kaç slot kaplayacağı (X = Genişlik, Y = Yükseklik).
+  // Örnek: FIntPoint(2,3) => 2 sütun, 3 satır.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FIntPoint ItemSize = FIntPoint(1, 1);
+
+  // Eşyanın %100 kondisyondaki ham takas değeri (caps, puan vb.).
+  // Gerçek değer CalculateBarterValue() ile kondisyona göre hesaplanır.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory",
+            meta = (ClampMin = "0.0"))
+  float BaseValue = 0.0f;
+
+  // true ise eşya envanter ızgarasında 90 derece döndürülebilir.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  bool bCanBeRotated = false;
+
+  // Eşyanın kilogram cinsinden ağırlığı.
+  // UI'da "X.X kg" formatında gösterilir; taşıma kapasitesini etkiler.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory",
+            meta = (ClampMin = "0.0"))
+  float Weight = 0.0f;
 };
