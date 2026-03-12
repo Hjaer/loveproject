@@ -31,7 +31,11 @@ enum class EItemType : uint8 {
   Ammo UMETA(DisplayName = "Ammo (Muhimmat)"),
   Weapon UMETA(DisplayName = "Weapon (Silah)"),
   Quest UMETA(DisplayName = "Quest (Gorev)"),
-  Backpack UMETA(DisplayName = "Backpack (Sirt Cantasi)")
+  Backpack UMETA(DisplayName = "Backpack (Sirt Cantasi)"),
+  QuestItem UMETA(DisplayName = "Quest"),
+  Gear UMETA(DisplayName = "Gear (Ekipman)"),
+  Valuable UMETA(DisplayName = "Valuable (Degerli)"),
+  Tool UMETA(DisplayName = "Tool (Alet)")
 };
 
 /**

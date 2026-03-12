@@ -33,6 +33,14 @@ void UTradeComponent::Server_SellItem_Implementation(
   if (!PlayerInventory || ItemToSell.IsNull())
     return;
 
+  // Eşya verisine bak, eğer Quest (Görev) eşyası ise satışı reddet
+  const FItemDBRow *ItemRowCheck =
+      ItemToSell.GetRow<FItemDBRow>(TEXT("TradeComponent::Server_SellItem_Check"));
+  if (ItemRowCheck && (ItemRowCheck->ItemType == EItemType::QuestItem || ItemRowCheck->ItemType == EItemType::Quest)) {
+      UE_LOG(LogTemp, Warning, TEXT("Görev eşyası satılamaz."));
+      return;
+  }
+
   // 1. ADIM: Eşyayı oyuncudan al (Envanterden sil)
   bool bRemoved = PlayerInventory->RemoveItem(ItemToSell, 1);
 

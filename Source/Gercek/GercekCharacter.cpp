@@ -931,6 +931,16 @@ void AGercekCharacter::UseItemFromInventory(const FDataTableRowHandle &ItemRowHa
 void AGercekCharacter::DropItemFromInventory(const FDataTableRowHandle &ItemRowHandle) {
   if (ItemRowHandle.IsNull() || !InventoryComponent) return;
 
+  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(TEXT("AGercekCharacter::DropItemFromInventory"));
+  if (!Row) return;
+
+  if (Row->ItemType == EItemType::QuestItem || Row->ItemType == EItemType::Quest) {
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow, TEXT("Görev eşyaları yere atılamaz."));
+    }
+    return;
+  }
+
   // Çantadan 1 adet silmeyi dener
   if (InventoryComponent->RemoveItem(ItemRowHandle, 1)) {
     if (FpsCameraComponent) {
