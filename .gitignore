@@ -1,4 +1,5 @@
-Binaries/
+Binaries/**/*.exe
+Binaries/**/*.pdb
 Build/
 DerivedDataCache/
 Intermediate/
