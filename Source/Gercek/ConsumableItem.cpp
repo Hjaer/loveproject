@@ -1,6 +1,7 @@
 #include "ConsumableItem.h"
 #include "GercekCharacter.h"
-#include "InventoryComponent.h"
+// InventoryComponent.h kaldırıldı — ConsumableItem artık Super::Interact (ItemBase)
+// üzerinden UPostApocInventoryComponent->TryAddItem kullanıyor.
 
 AConsumableItem::AConsumableItem() {
   // Tüketilebilir sınıfı için özel başlangıç ayarları

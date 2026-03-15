@@ -1,6 +1,7 @@
 #include "WeaponItem.h"
 #include "GercekCharacter.h"
-#include "InventoryComponent.h"
+// InventoryComponent.h kaldırıldı — WeaponItem artık Super::Interact (ItemBase)
+// üzerinden UPostApocInventoryComponent->TryAddItem kullanıyor.
 
 AWeaponItem::AWeaponItem() {
   // Silah sınıfı için özel başlangıç ayarları

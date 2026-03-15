@@ -27,7 +27,7 @@ void UInventorySlotWidget::SetEmptySlot() {
   }
 
   if (ItemValueText) {
-    ItemNameText->SetText(FText::GetEmpty());
+    ItemValueText->SetText(FText::GetEmpty()); // Düzeltme: ItemNameText değil ItemValueText
     ItemValueText->SetVisibility(ESlateVisibility::Collapsed);
   }
 

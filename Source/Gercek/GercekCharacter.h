@@ -5,7 +5,8 @@
 #include "GameFramework/Character.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "ItemTypes.h"        // EItemType, EItemRarity, FItemDBRow
+#include "ItemTypes.h"              // EItemType, EItemRarity, FItemDBRow
+#include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
 #include "GercekCharacter.generated.h"
 // clang-format on
 
@@ -161,9 +162,11 @@ protected:
   UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
   FText GetInteractLabelText() const;
 
-  // Envanter Bileşeni (Inventory Component)
+  // Grid Tabanlı Envanter Bileşeni (Grid Inventory Component)
+  // Eski liste-tabanlı UInventoryComponent kaldırıldı; yerine ızgara mantıklı
+  // UPostApocInventoryComponent kullanılıyor.
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
-  class UInventoryComponent *InventoryComponent;
+  UPostApocInventoryComponent *InventoryComponent;
 
   AActor *CurrentInteractable;
 

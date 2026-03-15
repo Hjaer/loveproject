@@ -3,7 +3,8 @@
 #include "WorldItemActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-#include "InventoryComponent.h"
+#include "InventoryComponent.h"    // Eski sistem — TradeComponent hâlâ kullanıyor, include kalıyor
+#include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
 
 // Sets default values
 AWorldItemActor::AWorldItemActor() {
@@ -55,22 +56,21 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
   }
 
   // Fetch the player's inventory.
-  UInventoryComponent *Inventory =
-      Player->FindComponentByClass<UInventoryComponent>();
+  UPostApocInventoryComponent *Inventory =
+      Player->FindComponentByClass<UPostApocInventoryComponent>();
   if (!Inventory) {
     UE_LOG(LogTemp, Warning,
-           TEXT("[WorldItem] Player '%s' has no InventoryComponent."),
+           TEXT("[WorldItem] Player '%s' has no PostApocInventoryComponent."),
            *Player->GetName());
     return;
   }
 
-  // Handle-based add: no raw pointers. Safe for World Partition (no dangling
-  // refs).
-  if (Inventory->AddItem(ItemRowHandle, 1)) {
+  // Grid tabanlı ekleme: yer varsa sahneyi temizle, yoksa uyar.
+  if (Inventory->TryAddItem(ItemRowHandle)) {
     Destroy();
   } else {
     UE_LOG(LogTemp, Warning,
-           TEXT("[WorldItem] Could not pick up '%s'. Pack is full or item is "
+           TEXT("[WorldItem] Could not pick up '%s'. Grid is full or item is "
                 "invalid."),
            *Row->ItemName.ToString());
   }

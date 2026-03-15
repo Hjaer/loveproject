@@ -78,4 +78,15 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags")
 	bool bQuestItem = false;
+
+	// ---- Grid (Inventory) Alanları ----------------------------------------
+
+	// Izgara üzerinde kaç hücre kapladığı: X=Genişlik, Y=Yükseklik.
+	// Örn: FIntPoint(2,3) => 2 sütun geniş, 3 satır yüksek.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+	FIntPoint ItemSize = FIntPoint(1, 1);
+
+	// Eşyanın envanter ızgarasında 90 derece döndürülüp döndürülemeyeceği.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+	bool bCanBeRotated = false;
 };

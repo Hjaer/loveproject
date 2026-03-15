@@ -1,7 +1,8 @@
 #include "ItemBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-#include "InventoryComponent.h"
+// #include "InventoryComponent.h" -- Eski liste sistemi (TradeComponent hâlâ kullanıyor)
+#include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
 
 // ---------------------------------------------------------------------------
 // PostApocItems Data Table — proje eşya tablosu [cite: 2026-02-20].
@@ -67,9 +68,9 @@ void AItemBase::Interact(AGercekCharacter *Player) {
   }
 
   const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
-  UInventoryComponent *Inventory =
-      Player->FindComponentByClass<UInventoryComponent>();
-  if (IsValid(Inventory) && Inventory->AddItem(Handle, 1)) {
+  UPostApocInventoryComponent *Inventory =
+      Player->FindComponentByClass<UPostApocInventoryComponent>();
+  if (IsValid(Inventory) && Inventory->TryAddItem(Handle)) {
     Destroy();
   }
 }

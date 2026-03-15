@@ -15,7 +15,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interactable.h"
-#include "InventoryComponent.h"
+// #include "InventoryComponent.h" -- Eski liste-tabanlı envanter kaldırıldı.
+#include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
 #include "InventoryWidget.h"
 #include "TimerManager.h"
 #include "WorldItemActor.h"
@@ -44,9 +45,14 @@ AGercekCharacter::AGercekCharacter() {
   CurrentInteractItemName = TEXT("");
   CurrentInteractable = nullptr;
 
-  // Envanter Bileşeni Başlatma
+  // Grid (Tetris) Tabanlı Envanter Bileşeni Başlatma
   InventoryComponent =
-      CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+      CreateDefaultSubobject<UPostApocInventoryComponent>(TEXT("InventoryComponent"));
+  if (InventoryComponent)
+  {
+      InventoryComponent->GridColumns = 10;
+      InventoryComponent->GridRows    = 5;
+  }
 
   // Widget Referansı
   static ConstructorHelpers::FClassFinder<UUserWidget>
@@ -117,10 +123,13 @@ void AGercekCharacter::GetLifetimeReplicatedProps(
 void AGercekCharacter::BeginPlay() {
   Super::BeginPlay();
 
-  if (InventoryComponent) {
-    InventoryComponent->OnWeightChanged.AddDynamic(
-        this, &AGercekCharacter::OnInventoryWeightChanged);
-  }
+  // OnWeightChanged: Bu delegate UInventoryComponent'e aitti.
+  // UPostApocInventoryComponent'te henüz karşılığı yok — geçiş dönemi için
+  // yorum satırında bırakıldı. Bildirim sistemi grid widget'a taşınınca geri açılır.
+  // if (InventoryComponent) {
+  //   InventoryComponent->OnWeightChanged.AddDynamic(
+  //       this, &AGercekCharacter::OnInventoryWeightChanged);
+  // }
 
   if (!BreathingAudioComponent) {
     BreathingAudioComponent = FindComponentByClass<UAudioComponent>();
@@ -209,12 +218,9 @@ void AGercekCharacter::Tick(float DeltaTime) {
       Health = FMath::Clamp(Health, 0.0f, MaxHealth);
     }
 
-    // Zıplama kısıtlaması (Can 25'ten azsa çift zıplama kapatılır)
-    if (Health < 25.0f) {
-      JumpMaxCount = 1;
-    } else {
-      JumpMaxCount = 2; // Veya projedeki varsayılan değer neyse onu kullanın
-    }
+    // Gerçekçi zıplama: Tek zıplama her durumda sabit.
+    // Can 25 altında bile JumpMaxCount = 1 — çift zıplama yok.
+    JumpMaxCount = 1;
 
     // Stamina yönetimi ve Koşma mantığı
     if (bIsSprinting && GetVelocity().SizeSquared() > 0 && !bIsExhausted) {
@@ -522,6 +528,12 @@ void AGercekCharacter::StartCrouch() {
 void AGercekCharacter::StopCrouch() { UnCrouch(); }
 
 void AGercekCharacter::Jump() {
+  // Gerçekçilik kuralı: Sadece yerde iken zıplanabilir.
+  // IsFalling() veya !IsMovingOnGround() ile hava zıplaması tamamen kapatılır.
+  if (!GetCharacterMovement() || !GetCharacterMovement()->IsMovingOnGround()) {
+    return;
+  }
+
   // Stamina kontrolü (En az 10 stamina gerekli)
   if (Stamina >= 10.0f) {
     // Stamina maliyeti
@@ -610,10 +622,10 @@ void AGercekCharacter::ToggleInventory() {
     InventoryWidget =
         CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
     if (IsValid(InventoryWidget)) {
-      if (UInventoryWidget *TypedInventoryWidget =
-              Cast<UInventoryWidget>(InventoryWidget)) {
-        TypedInventoryWidget->SetInventoryComponent(InventoryComponent);
-      }
+      // SetInventoryComponent: InventoryWidget hâlâ UInventoryComponent* bekliyor.
+      // UPostApocInventoryComponent'e geçiş tamamlandığında bu bağlantı
+      // UInventoryWidget güncellenince yeniden kurulacak.
+      // TypedInventoryWidget->SetInventoryComponent(InventoryComponent);
       InventoryWidget->AddToViewport(10);
       InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
     }
@@ -800,7 +812,13 @@ void AGercekCharacter::ResetStaminaRecoveryBuff() {
 float AGercekCharacter::GetWeightRatio() const {
   if (!InventoryComponent)
     return 0.0f;
-  return InventoryComponent->GetCapacityRatio();
+  // Grid doluluk oranı: Kaplanan hücre sayısı / Toplam hücre sayısı (Cols * Rows)
+  const int32 TotalCells = InventoryComponent->GetGridColumns() * InventoryComponent->GetGridRows();
+  if (TotalCells <= 0)
+    return 0.0f;
+  return FMath::Clamp(
+      static_cast<float>(InventoryComponent->GetOccupiedSlots().Num()) / static_cast<float>(TotalCells),
+      0.0f, 1.0f);
 }
 
 // ==== AĞIRLIK KAYNAKLI HAREKET GÜNCELLEMESİ ====
@@ -879,28 +897,28 @@ void AGercekCharacter::ShowInventoryDetails() {
     return;
   }
 
-  TArray<FInventorySlot> Items = InventoryComponent->GetInventoryForUI();
+  const TMap<FIntPoint, FName>& Slots = InventoryComponent->GetOccupiedSlots();
 
-  if (Items.Num() == 0) {
+  if (Slots.Num() == 0) {
     if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red,
-                                       TEXT("Envanter Bos"));
+      GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Envanter Bos"));
     }
     UE_LOG(LogTemp, Warning, TEXT("Envanter Bos"));
     return;
   }
 
-  for (const FInventorySlot &Slot : Items) {
-    if (!Slot.IsValid())
-      continue;
+  // Grid  özeti: Benzersiz eşya adlarını ve kapladıkları hücre sayısını göster.
+  TMap<FName, int32> ItemCellCounts;
+  for (const TPair<FIntPoint, FName>& Pair : Slots)
+  {
+    ItemCellCounts.FindOrAdd(Pair.Value)++;
+  }
 
-    const FItemDBRow *Row = Slot.GetRow();
-    if (!Row)
-      continue;
-
-    FString Message = FString::Printf(TEXT("Esya: %s x%d | Agirlik: %.2f kg"),
-                                      *Row->ItemName.ToString(), Slot.Quantity,
-                                      Row->ItemWeight * Slot.Quantity);
+  for (const TPair<FName, int32>& Entry : ItemCellCounts)
+  {
+    FString Message = FString::Printf(
+        TEXT("[GRID] %s  |  %d hucre kaplıyor"),
+        *Entry.Key.ToString(), Entry.Value);
 
     if (GEngine) {
       GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, Message);
@@ -918,13 +936,15 @@ void AGercekCharacter::UseItemFromInventory(const FDataTableRowHandle &ItemRowHa
   if (!Row) return;
 
   if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med) {
-    // Çantadan 1 adet silmeyi dener
-    if (InventoryComponent->RemoveItem(ItemRowHandle, 1)) {
-      // Amount olarak ItemValue kullan (İyileştirme miktarı)
-      ConsumeItem(Row->ItemType, Row->ItemValue);
+    // Grid'den 1 adet kaldır (tüm hücreleri serbest bırakır)
+    if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
+      // Amount olarak ItemValue kullan (iyileştirme miktarı)
+      ConsumeItem(Row->ItemType, static_cast<float>(Row->ItemValue));
     }
   } else {
-    UE_LOG(LogTemp, Warning, TEXT("[AGercekCharacter] Tüketilemeyen esya kullanilmaya calisildi: %s"), *Row->ItemName.ToString());
+    UE_LOG(LogTemp, Warning,
+           TEXT("[AGercekCharacter] Tüketilemeyen eşya kullanılmaya calısıldı: %s"),
+           *Row->ItemName.ToString());
   }
 }
 
@@ -936,16 +956,17 @@ void AGercekCharacter::DropItemFromInventory(const FDataTableRowHandle &ItemRowH
 
   if (Row->ItemType == EItemType::QuestItem || Row->ItemType == EItemType::Quest) {
     if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow, TEXT("Görev eşyaları yere atılamaz."));
+      GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
+                                       TEXT("Görev eşyaları yere atılamaz."));
     }
     return;
   }
 
-  // Çantadan 1 adet silmeyi dener
-  if (InventoryComponent->RemoveItem(ItemRowHandle, 1)) {
+  // Grid'den kaldır, başarılıysa yere at
+  if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
     if (FpsCameraComponent) {
-      // Karakterin baktığı yöne doğru 100 birim ileriye Drop lokasyonu hesapla
-      FVector DropLocation = FpsCameraComponent->GetComponentLocation() + (FpsCameraComponent->GetForwardVector() * 100.0f);
+      FVector DropLocation = FpsCameraComponent->GetComponentLocation()
+                           + (FpsCameraComponent->GetForwardVector() * 100.0f);
       SpawnItemInWorld(ItemRowHandle, DropLocation);
     }
   }

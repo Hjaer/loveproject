@@ -103,7 +103,7 @@ void UMainMenuWidget::NativeConstruct() {
 
   // KÖK ÇÖZÜM 1: Widget'ın kendisini Focus (Odak) alabilir hale getiriyoruz.
   // Blueprint ayarlarında bozulmuş olsa bile C++ bunu ezip zorunlu tutacak.
-  bIsFocusable = true;
+  SetIsFocusable(true);
 
   // KÖK ÇÖZÜM 2: Ana widget'i, Root'u (Canvas Panel) ve Resmi "Visible" (Sert
   // Çarpışma) olarak kilitliyoruz. Böylece "boşluklar" dahil hiçbir alan şeffaf
