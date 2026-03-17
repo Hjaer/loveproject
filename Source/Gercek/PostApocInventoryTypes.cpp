@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PostApocInventoryTypes.h"
+#include "Engine/DataTable.h"
 
 // ============================================================
 //  UPostApocInventoryComponent — Implementasyon
@@ -243,4 +244,42 @@ int32 UPostApocInventoryComponent::GetItemCountInGrid(FName ItemRowName) const
         }
     }
     return Count;
+}
+
+// ------------------------------------------------------------
+//  ExecuteTrade — Takas İşlemini Gerçekleştiren C++ Fonksiyonu
+//  Blueprint'ten çağrılır.
+// ------------------------------------------------------------
+void UPostApocInventoryComponent::ExecuteTrade(
+    TArray<FDataTableRowHandle> PlayerOfferItems,
+    TArray<FDataTableRowHandle> TraderOfferItems)
+{
+    // 1. OYUNCUNUN VERDİKLERİNİ SİL (Çantadan çıkar)
+    // Not: İleride RemoveItem fonksiyonu yazıldığında buradaki yorum satırları açılacak.
+    /*
+    for (const FDataTableRowHandle& ItemToRemove : PlayerOfferItems)
+    {
+        // RemoveItem(ItemToRemove);
+    }
+    */
+
+    // 2. TÜCCARDAN ALINANLARI ÇANTAYA YERLEŞTİR
+    for (const FDataTableRowHandle& ItemToAdd : TraderOfferItems)
+    {
+        // TryAddItem, eşyayı Tetris çantasına yerleştirmeye çalışır
+        bool bSuccess = TryAddItem(ItemToAdd);
+
+        if (bSuccess)
+        {
+            UE_LOG(LogTemp, Display, TEXT("[Takas] Esya basariyla Tetris cantaya eklendi."));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("[Takas] Cantada yer yok! Esya sigmadi."));
+            // İleride buraya sığmayan eşyayı yere atma (SpawnActor) kodu eklenecek.
+        }
+    }
+
+    // 3. UI'I GÜNCELLE
+    // Takas bittikten sonra Blueprint tarafında arayüzü yenilemek için ileride buraya bir Delegate eklenecek.
 }

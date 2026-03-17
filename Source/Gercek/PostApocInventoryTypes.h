@@ -5,6 +5,7 @@
 // --- Standard Unreal includes first ---
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "UObject/Interface.h"
 
 // FItemDBRow ve FPostApocItemRow tanımları buradan geliyor.
@@ -189,6 +190,27 @@ public:
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool CheckSpace(FIntPoint TopLeftIndex, FIntPoint ItemSize,
                   bool bIsRotated) const;
+
+  // -------------------------------------------------------
+  /**
+   * ExecuteTrade
+   *
+   * Oyuncu ile tüccar arasında Takas (Barter) gerçekleştirir.
+   *
+   * Akış:
+   *   1. Oyuncunun teklif ettiği eşyaların tamamının envanterde
+   *      mevcut olup olmadığını doğrular.
+   *   2. Tüccarın teklif ettiği eşyalar için yeterli ızgara alanı
+   *      bulunup bulunmadığını kontrol eder.
+   *   3. Her iki koşul da sağlanıyorsa; oyuncu eşyalarını envanterden
+   *      kaldırır, tüccar eşyalarını ekler ve takas tamamlanır.
+   *
+   * @param PlayerOfferItems  - Oyuncunun vereceği eşyaların DataTable satır referansları.
+   * @param TraderOfferItems  - Oyuncunun alacağı eşyaların DataTable satır referansları.
+   */
+  UFUNCTION(BlueprintCallable, Category = "Ticaret")
+  void ExecuteTrade(TArray<FDataTableRowHandle> PlayerOfferItems,
+                    TArray<FDataTableRowHandle> TraderOfferItems);
 
   // --- Grid Erişim Yardımcıları ---
 
