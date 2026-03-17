@@ -62,7 +62,7 @@ void UTradeComponent::Server_ExecuteTrade_Implementation(
     }
   }
 
-  // Sahibi olan Karakteri bul (Yere eşya atma hesabi icin)
+  // Sahibi olan Karakteri bul (Yere eşya atma hesabi ve XP icin)
   AGercekCharacter* OwnerCharacter = Cast<AGercekCharacter>(GetOwner());
   FVector SpawnLocation = FVector::ZeroVector;
   if (OwnerCharacter) {
@@ -72,9 +72,16 @@ void UTradeComponent::Server_ExecuteTrade_Implementation(
     SpawnLocation = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
   }
 
+  float TotalTradeValue = 0.0f;
+
   // 2. TÜCCARDAN ALINANLARI ÇANTAYA YERLEŞTİR VEYA YERE AT
   for (const FDataTableRowHandle& RequestItem : TraderOfferItems) {
     if (RequestItem.IsNull()) continue;
+
+    const FItemDBRow* ItemRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::RequestCheck"));
+    if (ItemRowCheck) {
+      TotalTradeValue += ItemRowCheck->ItemValue; // XP olarak eklenecek değer
+    }
 
     // TryAddItem, eşyayı Tetris çantasına yerleştirmeye çalışır
     bool bSuccess = PlayerInventory->TryAddItem(RequestItem);
@@ -108,6 +115,12 @@ void UTradeComponent::Server_ExecuteTrade_Implementation(
         }
       }
     }
+  }
+
+  // İşlem bitince XP'yi ekle
+  if (OwnerCharacter && TotalTradeValue > 0.0f) {
+    OwnerCharacter->AddTradeXP(TotalTradeValue);
+    UE_LOG(LogTemp, Log, TEXT("[TRADE] Takas tamamlandi. Oyuncu %.1f Ticaret XP'si (TradeXP) kazandi."), TotalTradeValue);
   }
 }
 

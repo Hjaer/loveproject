@@ -27,6 +27,17 @@ enum class EPostApocItemCategory : uint8 {
 };
 
 /**
+ * ETradeKnowledge
+ * Oyuncunun ticaret tecrübe seviyesini temsil eder. (Novice, Apprentice, Expert)
+ */
+UENUM(BlueprintType)
+enum class ETradeKnowledge : uint8 {
+  Novice UMETA(DisplayName = "Novice (0-1999 XP)"),
+  Apprentice UMETA(DisplayName = "Apprentice (2000-4999 XP)"),
+  Expert UMETA(DisplayName = "Expert (5000+ XP)")
+};
+
+/**
  * FPostApocItemRow
  * PostApocItems DataTable için production-friendly, genişletilebilir ve temiz
  * veri satırı.

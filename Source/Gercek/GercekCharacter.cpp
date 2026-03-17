@@ -105,6 +105,10 @@ AGercekCharacter::AGercekCharacter() {
   // --- CO-OP ALTYAPISI (EKLEME) ---
   bReplicates = true;
   SetReplicateMovement(true);
+
+  // Ticaret / XP Başlangıç
+  TradeXP = 0.0f;
+  CurrentKnowledge = ETradeKnowledge::Novice;
 }
 
 // --- REPLICATION KAYIT FONKSİYONU (EKLEME) ---
@@ -116,6 +120,50 @@ void AGercekCharacter::GetLifetimeReplicatedProps(
   DOREPLIFETIME(AGercekCharacter, Stamina);
   DOREPLIFETIME(AGercekCharacter, Hunger);
   DOREPLIFETIME(AGercekCharacter, Thirst);
+  
+  // Ticaret XP ve Bilgi Seviyesi
+  DOREPLIFETIME(AGercekCharacter, TradeXP);
+  DOREPLIFETIME(AGercekCharacter, CurrentKnowledge);
+}
+
+// ==== TİCARET VE BİLGİ SEVİYESİ (TRADE KNOWLEDGE) ====
+
+void AGercekCharacter::AddTradeXP(float Amount) {
+  // Sadece yetkili sunucuda çalışır
+  if (!HasAuthority()) return;
+
+  TradeXP += Amount;
+
+  // Seviye (Knowledge) güncellemesi
+  if (TradeXP >= 5000.0f) {
+    CurrentKnowledge = ETradeKnowledge::Expert;
+  } else if (TradeXP >= 2000.0f) {
+    CurrentKnowledge = ETradeKnowledge::Apprentice;
+  } else {
+    CurrentKnowledge = ETradeKnowledge::Novice;
+  }
+}
+
+FText AGercekCharacter::GetKnowledgeAdjustedValue(float BaseValue) const {
+  switch (CurrentKnowledge) {
+    case ETradeKnowledge::Novice:
+      // Acemi: Değeri hiç bilemez
+      return FText::FromString(TEXT("???"));
+      
+    case ETradeKnowledge::Apprentice: {
+      // Çırak: +/- %25 tahmin yürütebilir
+      int32 MinVal = FMath::RoundToInt(BaseValue * 0.75f);
+      int32 MaxVal = FMath::RoundToInt(BaseValue * 1.25f);
+      return FText::FromString(FString::Printf(TEXT("~ %d - %d"), MinVal, MaxVal));
+    }
+      
+    case ETradeKnowledge::Expert:
+      // Uzman: Tam değeri bilir
+      return FText::FromString(FString::FromInt(FMath::RoundToInt(BaseValue)));
+      
+    default:
+      return FText::FromString(TEXT("???"));
+  }
 }
 
 // Called when the game starts or when spawned

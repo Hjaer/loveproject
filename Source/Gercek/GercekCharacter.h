@@ -6,6 +6,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "ItemTypes.h"              // EItemType, EItemRarity, FItemDBRow
+#include "PostApocItemTypes.h"      // ETradeKnowledge, EPostApocItemCategory vb.
 #include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
 #include "GercekCharacter.generated.h"
 // clang-format on
@@ -167,6 +168,20 @@ protected:
   // UPostApocInventoryComponent kullanılıyor.
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
   UPostApocInventoryComponent *InventoryComponent;
+
+  // ==== TİCARET VE TECRÜBE SİSTEMİ ====
+  
+  UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Trade Knowledge", Replicated)
+  float TradeXP;
+
+  UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Trade Knowledge", Replicated)
+  ETradeKnowledge CurrentKnowledge;
+
+  UFUNCTION(BlueprintCallable, Category = "Trade Knowledge")
+  void AddTradeXP(float Amount);
+
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Trade Knowledge")
+  FText GetKnowledgeAdjustedValue(float BaseValue) const;
 
   AActor *CurrentInteractable;
 
