@@ -53,6 +53,23 @@ enum class EItemRarity : uint8 {
   Legendary UMETA(DisplayName = "Legendary")
 };
 
+/**
+ * EItemCategory
+ *
+ * Eşyaların genel sınıflandırma kategorisi. Özellikle 'Quest' kategorisindeki
+ * eşyaların atılamaz veya satılamaz olmasını kontrol etmek için kullanılır.
+ */
+UENUM(BlueprintType)
+enum class EItemCategory : uint8 {
+  None UMETA(DisplayName = "None (Yok)"),
+  Consumable UMETA(DisplayName = "Consumable (Tuketilebilir)"),
+  Equipment UMETA(DisplayName = "Equipment (Ekipman)"),
+  Weapon UMETA(DisplayName = "Weapon (Silah)"),
+  Material UMETA(DisplayName = "Material (Malzeme)"),
+  Quest UMETA(DisplayName = "Quest (Gorev)"),
+  Valuable UMETA(DisplayName = "Valuable (Degerli)")
+};
+
 // ============================================================
 //  MASTER DATA STRUCT
 // ============================================================
@@ -97,6 +114,10 @@ public:
   // Eşyanın işlevsel kategorisi (loot tablosu, tüketim, filtre).
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Mechanics")
   EItemType ItemType = EItemType::Junk;
+
+  // Eşyanın genel kategorisi. Ticaret ve drop kurallarını belirler.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Mechanics")
+  EItemCategory ItemCategory = EItemCategory::None;
 
   // Nadirlik seviyesi (UI rengi, drop ağırlığı).
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Mechanics")

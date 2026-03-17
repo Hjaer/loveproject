@@ -46,12 +46,11 @@ AGercekCharacter::AGercekCharacter() {
   CurrentInteractable = nullptr;
 
   // Grid (Tetris) Tabanlı Envanter Bileşeni Başlatma
-  InventoryComponent =
-      CreateDefaultSubobject<UPostApocInventoryComponent>(TEXT("InventoryComponent"));
-  if (InventoryComponent)
-  {
-      InventoryComponent->GridColumns = 10;
-      InventoryComponent->GridRows    = 5;
+  InventoryComponent = CreateDefaultSubobject<UPostApocInventoryComponent>(
+      TEXT("InventoryComponent"));
+  if (InventoryComponent) {
+    InventoryComponent->GridColumns = 10;
+    InventoryComponent->GridRows = 5;
   }
 
   // Widget Referansı
@@ -125,8 +124,8 @@ void AGercekCharacter::BeginPlay() {
 
   // OnWeightChanged: Bu delegate UInventoryComponent'e aitti.
   // UPostApocInventoryComponent'te henüz karşılığı yok — geçiş dönemi için
-  // yorum satırında bırakıldı. Bildirim sistemi grid widget'a taşınınca geri açılır.
-  // if (InventoryComponent) {
+  // yorum satırında bırakıldı. Bildirim sistemi grid widget'a taşınınca geri
+  // açılır. if (InventoryComponent) {
   //   InventoryComponent->OnWeightChanged.AddDynamic(
   //       this, &AGercekCharacter::OnInventoryWeightChanged);
   // }
@@ -569,7 +568,8 @@ void AGercekCharacter::Interact() {
   }
 
   // Yeni Mantık: Etkileşime geçilen nesnenin verisini alıp bizzat çantaya ekle
-  FDataTableRowHandle ItemData = IInteractable::Execute_GetItemData(CurrentInteractable);
+  FDataTableRowHandle ItemData =
+      IInteractable::Execute_GetItemData(CurrentInteractable);
 
   if (!ItemData.IsNull() && InventoryComponent) {
     // 1. Envantere eklemeyi dene
@@ -579,11 +579,14 @@ void AGercekCharacter::Interact() {
     } else {
       // 3. Başarısızsa oyuncuyu uyar
       if (GEngine) {
-        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, TEXT("[Envanter] Esya icin yeterli yer yok."));
+        GEngine->AddOnScreenDebugMessage(
+            -1, 3.0f, FColor::Red,
+            TEXT("[Envanter] Esya icin yeterli yer yok."));
       }
     }
   } else {
-    // Eşya verisi yoksa veya envanter bileşeni yoksa klasik etkileşim (Örn: kapı açma)
+    // Eşya verisi yoksa veya envanter bileşeni yoksa klasik etkileşim (Örn:
+    // kapı açma)
     IInteractable::Execute_OnInteract(CurrentInteractable, this);
   }
 
@@ -605,7 +608,8 @@ void AGercekCharacter::Interact() {
 
   // If the inventory widget is open, trigger a UI refresh using reflection.
   if (IsValid(InventoryWidget)) {
-    UFunction *RefreshFunc = InventoryWidget->FindFunction(TEXT("RefreshInventory"));
+    UFunction *RefreshFunc =
+        InventoryWidget->FindFunction(TEXT("RefreshInventory"));
     if (RefreshFunc) {
       InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
     }
@@ -811,12 +815,15 @@ void AGercekCharacter::ResetStaminaRecoveryBuff() {
 float AGercekCharacter::GetWeightRatio() const {
   if (!InventoryComponent)
     return 0.0f;
-  // Grid doluluk oranı: Kaplanan hücre sayısı / Toplam hücre sayısı (Cols * Rows)
-  const int32 TotalCells = InventoryComponent->GetGridColumns() * InventoryComponent->GetGridRows();
+  // Grid doluluk oranı: Kaplanan hücre sayısı / Toplam hücre sayısı (Cols *
+  // Rows)
+  const int32 TotalCells =
+      InventoryComponent->GetGridColumns() * InventoryComponent->GetGridRows();
   if (TotalCells <= 0)
     return 0.0f;
   return FMath::Clamp(
-      static_cast<float>(InventoryComponent->GetOccupiedSlots().Num()) / static_cast<float>(TotalCells),
+      static_cast<float>(InventoryComponent->GetOccupiedSlots().Num()) /
+          static_cast<float>(TotalCells),
       0.0f, 1.0f);
 }
 
@@ -896,11 +903,12 @@ void AGercekCharacter::ShowInventoryDetails() {
     return;
   }
 
-  const TMap<FIntPoint, FName>& Slots = InventoryComponent->GetOccupiedSlots();
+  const TMap<FIntPoint, FName> &Slots = InventoryComponent->GetOccupiedSlots();
 
   if (Slots.Num() == 0) {
     if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Envanter Bos"));
+      GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red,
+                                       TEXT("Envanter Bos"));
     }
     UE_LOG(LogTemp, Warning, TEXT("Envanter Bos"));
     return;
@@ -908,16 +916,13 @@ void AGercekCharacter::ShowInventoryDetails() {
 
   // Grid  özeti: Benzersiz eşya adlarını ve kapladıkları hücre sayısını göster.
   TMap<FName, int32> ItemCellCounts;
-  for (const TPair<FIntPoint, FName>& Pair : Slots)
-  {
+  for (const TPair<FIntPoint, FName> &Pair : Slots) {
     ItemCellCounts.FindOrAdd(Pair.Value)++;
   }
 
-  for (const TPair<FName, int32>& Entry : ItemCellCounts)
-  {
-    FString Message = FString::Printf(
-        TEXT("[GRID] %s  |  %d hucre kaplıyor"),
-        *Entry.Key.ToString(), Entry.Value);
+  for (const TPair<FName, int32> &Entry : ItemCellCounts) {
+    FString Message = FString::Printf(TEXT("[GRID] %s  |  %d hucre kaplıyor"),
+                                      *Entry.Key.ToString(), Entry.Value);
 
     if (GEngine) {
       GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, Message);
@@ -928,11 +933,15 @@ void AGercekCharacter::ShowInventoryDetails() {
 
 // ==== ÇANTADAN KULLANMA VE YERE ATMA (USE & DROP) ====
 
-void AGercekCharacter::UseItemFromInventory(const FDataTableRowHandle &ItemRowHandle) {
-  if (ItemRowHandle.IsNull() || !InventoryComponent) return;
+void AGercekCharacter::UseItemFromInventory(
+    const FDataTableRowHandle &ItemRowHandle) {
+  if (ItemRowHandle.IsNull() || !InventoryComponent)
+    return;
 
-  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(TEXT("AGercekCharacter::UseItemFromInventory"));
-  if (!Row) return;
+  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(
+      TEXT("AGercekCharacter::UseItemFromInventory"));
+  if (!Row)
+    return;
 
   if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med) {
     // Grid'den 1 adet kaldır (tüm hücreleri serbest bırakır)
@@ -941,19 +950,29 @@ void AGercekCharacter::UseItemFromInventory(const FDataTableRowHandle &ItemRowHa
       ConsumeItem(Row->ItemType, static_cast<float>(Row->ItemValue));
     }
   } else {
-    UE_LOG(LogTemp, Warning,
-           TEXT("[AGercekCharacter] Tüketilemeyen eşya kullanılmaya calısıldı: %s"),
-           *Row->ItemName.ToString());
+    UE_LOG(
+        LogTemp, Warning,
+        TEXT(
+            "[AGercekCharacter] Tüketilemeyen eşya kullanılmaya calısıldı: %s"),
+        *Row->ItemName.ToString());
   }
 }
 
-void AGercekCharacter::DropItemFromInventory(const FDataTableRowHandle &ItemRowHandle) {
-  if (ItemRowHandle.IsNull() || !InventoryComponent) return;
+void AGercekCharacter::DropItemFromInventory(
+    const FDataTableRowHandle &ItemRowHandle) {
+  if (ItemRowHandle.IsNull() || !InventoryComponent)
+    return;
 
-  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(TEXT("AGercekCharacter::DropItemFromInventory"));
-  if (!Row) return;
+  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(
+      TEXT("AGercekCharacter::DropItemFromInventory"));
+  if (!Row)
+    return;
 
-  if (Row->ItemType == EItemType::QuestItem || Row->ItemType == EItemType::Quest) {
+  // Sadece Tip olarak değil; Kategori (ItemCategory) olarak da 'Quest'
+  // seçiliyse objeyi yere atma.
+  if (Row->ItemType == EItemType::QuestItem ||
+      Row->ItemType == EItemType::Quest ||
+      Row->ItemCategory == EItemCategory::Quest) {
     if (GEngine) {
       GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
                                        TEXT("Görev eşyaları yere atılamaz."));
@@ -964,21 +983,27 @@ void AGercekCharacter::DropItemFromInventory(const FDataTableRowHandle &ItemRowH
   // Grid'den kaldır, başarılıysa yere at
   if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
     if (FpsCameraComponent) {
-      FVector DropLocation = FpsCameraComponent->GetComponentLocation()
-                           + (FpsCameraComponent->GetForwardVector() * 100.0f);
+      FVector DropLocation = FpsCameraComponent->GetComponentLocation() +
+                             (FpsCameraComponent->GetForwardVector() * 100.0f);
       SpawnItemInWorld(ItemRowHandle, DropLocation);
     }
   }
 }
 
-AActor* AGercekCharacter::SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle, FVector SpawnLocation) {
-  if (ItemRowHandle.IsNull() || !GetWorld()) return nullptr;
+AActor *
+AGercekCharacter::SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle,
+                                   FVector SpawnLocation) {
+  if (ItemRowHandle.IsNull() || !GetWorld())
+    return nullptr;
 
   FActorSpawnParameters SpawnParams;
-  SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+  SpawnParams.SpawnCollisionHandlingOverride =
+      ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-  // AWorldItemActor oluştur 
-  AWorldItemActor* SpawnedItem = GetWorld()->SpawnActor<AWorldItemActor>(AWorldItemActor::StaticClass(), SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+  // AWorldItemActor oluştur
+  AWorldItemActor *SpawnedItem = GetWorld()->SpawnActor<AWorldItemActor>(
+      AWorldItemActor::StaticClass(), SpawnLocation, FRotator::ZeroRotator,
+      SpawnParams);
 
   if (SpawnedItem) {
     SpawnedItem->InitializeItemData(ItemRowHandle);
