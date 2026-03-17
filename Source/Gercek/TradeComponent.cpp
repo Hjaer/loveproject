@@ -90,8 +90,8 @@ void UTradeComponent::Server_ExecuteTrade_Implementation(
       UE_LOG(LogTemp, Display, TEXT("[TRADE] Alinan '%s' basariyla Tetris cantaya eklendi."), *RequestItem.RowName.ToString());
       
       // Çanta yükseltmesi (Backpack) kontrolü
-      const FItemDBRow* ItemRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::BackpackCheck"));
-      if (ItemRowCheck && ItemRowCheck->ItemType == EItemType::Backpack) {
+      const FItemDBRow* BackpackRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::BackpackCheck"));
+      if (BackpackRowCheck && BackpackRowCheck->ItemType == EItemType::Backpack) {
         HandleBackpackUpgrade(RequestItem, PlayerInventory);
       }
 

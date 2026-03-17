@@ -151,9 +151,9 @@ FText AGercekCharacter::GetKnowledgeAdjustedValue(float BaseValue) const {
       return FText::FromString(TEXT("???"));
       
     case ETradeKnowledge::Apprentice: {
-      // Çırak: +/- %25 tahmin yürütebilir
-      int32 MinVal = FMath::RoundToInt(BaseValue * 0.75f);
-      int32 MaxVal = FMath::RoundToInt(BaseValue * 1.25f);
+      // Çırak: +/- %33 tahmin yürütebilir
+      int32 MinVal = FMath::RoundToInt(BaseValue * 0.67f);
+      int32 MaxVal = FMath::RoundToInt(BaseValue * 1.33f);
       return FText::FromString(FString::Printf(TEXT("~ %d - %d"), MinVal, MaxVal));
     }
       

@@ -170,6 +170,7 @@ protected:
   UPostApocInventoryComponent *InventoryComponent;
 
   // ==== TİCARET VE TECRÜBE SİSTEMİ ====
+public:
   
   UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Trade Knowledge", Replicated)
   float TradeXP;
