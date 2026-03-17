@@ -7,7 +7,7 @@
 #include "InputMappingContext.h"
 #include "ItemTypes.h"              // EItemType, EItemRarity, FItemDBRow
 #include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
-#include "GercekCharacter.generated.h"
+#include "GercekCharacter.gsenerated.h"
 // clang-format on
 
 // Etkileşim hedefi değiştiğinde veya kaybolduğunda yıyınlı (broadcast) giden
@@ -273,4 +273,4 @@ protected:
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Stats")
   float InjuredSprintSpeed;
-};
+};  
