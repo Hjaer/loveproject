@@ -46,6 +46,13 @@ void UTradeComponent::Server_ExecuteTrade_Implementation(
   for (const FDataTableRowHandle& OfferItem : PlayerOfferItems) {
     if (OfferItem.IsNull()) continue;
     
+    // Görev/Quest kontrolü: Oyuncu görev eşyasını teklif edemez.
+    const FItemDBRow* RowCheck = OfferItem.GetRow<FItemDBRow>(TEXT("TradeComponent::QuestCheck"));
+    if (RowCheck && (RowCheck->ItemType == EItemType::QuestItem || RowCheck->ItemType == EItemType::Quest || RowCheck->ItemCategory == EItemCategory::Quest)) {
+      UE_LOG(LogTemp, Warning, TEXT("[TRADE] '%s' gorev esyasi oldugu icin satilamaz/verilemez."), *OfferItem.RowName.ToString());
+      continue;
+    }
+
     // Grid sisteminden esyayi kaldir
     bool bRemoved = PlayerInventory->RemoveItemFromGrid(OfferItem.RowName);
     if (bRemoved) {
