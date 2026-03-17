@@ -1,7 +1,8 @@
 #include "ItemBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-// #include "InventoryComponent.h" -- Eski liste sistemi (TradeComponent hâlâ kullanıyor)
+// #include "InventoryComponent.h" -- Eski liste sistemi (TradeComponent hâlâ
+// kullanıyor)
 #include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
 
 // ---------------------------------------------------------------------------
