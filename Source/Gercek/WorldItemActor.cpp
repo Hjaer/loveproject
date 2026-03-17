@@ -3,7 +3,6 @@
 #include "WorldItemActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-#include "InventoryComponent.h"    // Eski sistem — TradeComponent hâlâ kullanıyor, include kalıyor
 #include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
 
 // Sets default values

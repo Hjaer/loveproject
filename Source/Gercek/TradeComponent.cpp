@@ -2,6 +2,8 @@
 
 #include "TradeComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "WorldItemActor.h"
+#include "GercekCharacter.h"
 
 UTradeComponent::UTradeComponent() {
   PrimaryComponentTick.bCanEverTick = false;
@@ -12,105 +14,126 @@ UTradeComponent::UTradeComponent() {
 void UTradeComponent::GetLifetimeReplicatedProps(
     TArray<FLifetimeProperty> &OutLifetimeProps) const {
   Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
   DOREPLIFETIME(UTradeComponent, CurrentMoney);
 }
 
 void UTradeComponent::Server_AdjustMoney_Implementation(float Amount) {
   CurrentMoney += Amount;
-  // Negatif değerlere düşme kontrolü eklenebilir
   CurrentMoney = FMath::Max(0.0f, CurrentMoney);
-  UE_LOG(LogTemp, Log, TEXT("[TRADE] Money adjusted by %f. New Total: %f"),
+  UE_LOG(LogTemp, Log, TEXT("[TRADE] Para değişti: %f | Yeni Toplam: %f"),
          Amount, CurrentMoney);
 }
 
 bool UTradeComponent::Server_AdjustMoney_Validate(float Amount) { return true; }
 
-// EŞYA SATMA MANTIĞI
-void UTradeComponent::Server_SellItem_Implementation(
-    FDataTableRowHandle ItemToSell, UInventoryComponent *PlayerInventory) {
+// ============================================================
+//  YENI TICARET SISTEMI — Server_ExecuteTrade
+//  1. Oyuncunun teklif ettigi eşyaları (PlayerOfferItems) envanterden siler.
+//  2. Tüccarın teklif ettigi eşyaları (TraderOfferItems) ekler.
+//  3. Eğer çanta doluysa (TryAddItem = false), eşyayı yere spawn eder.
+// ============================================================
+void UTradeComponent::Server_ExecuteTrade_Implementation(
+    const TArray<FDataTableRowHandle>& PlayerOfferItems,
+    const TArray<FDataTableRowHandle>& TraderOfferItems,
+    UPostApocInventoryComponent* PlayerInventory) {
 
-  if (!PlayerInventory || ItemToSell.IsNull())
+  if (!PlayerInventory) {
+    UE_LOG(LogTemp, Warning, TEXT("[TRADE] Server_ExecuteTrade: PlayerInventory null."));
     return;
-
-  // Eşya verisine bak, eğer Quest (Görev) eşyası ise satışı reddet
-  const FItemDBRow *ItemRowCheck =
-      ItemToSell.GetRow<FItemDBRow>(TEXT("TradeComponent::Server_SellItem_Check"));
-  if (ItemRowCheck && (ItemRowCheck->ItemType == EItemType::QuestItem || ItemRowCheck->ItemType == EItemType::Quest)) {
-      UE_LOG(LogTemp, Warning, TEXT("Görev eşyası satılamaz."));
-      return;
   }
 
-  // 1. ADIM: Eşyayı oyuncudan al (Envanterden sil)
-  bool bRemoved = PlayerInventory->RemoveItem(ItemToSell, 1);
+  // 1. OYUNCUNUN VERDIKLERINI SIL (Çantadan çıkar)
+  for (const FDataTableRowHandle& OfferItem : PlayerOfferItems) {
+    if (OfferItem.IsNull()) continue;
+    
+    // Grid sisteminden esyayi kaldir
+    bool bRemoved = PlayerInventory->RemoveItemFromGrid(OfferItem.RowName);
+    if (bRemoved) {
+      UE_LOG(LogTemp, Log, TEXT("[TRADE] Teklif edilen '%s' envanterden silindi."), *OfferItem.RowName.ToString());
+    } else {
+      UE_LOG(LogTemp, Warning, TEXT("[TRADE] Teklif edilen '%s' envanterde bulunamadi!"), *OfferItem.RowName.ToString());
+    }
+  }
 
-  // 2. ADIM: Eğer eşya başarıyla silindiyse parasını öde
-  if (bRemoved) {
-    const FItemDBRow *ItemRow =
-        ItemToSell.GetRow<FItemDBRow>(TEXT("TradeComponent::Server_SellItem"));
-    if (ItemRow) {
-      CurrentMoney += ItemRow->ItemValue;
+  // Sahibi olan Karakteri bul (Yere eşya atma hesabi icin)
+  AGercekCharacter* OwnerCharacter = Cast<AGercekCharacter>(GetOwner());
+  FVector SpawnLocation = FVector::ZeroVector;
+  if (OwnerCharacter) {
+    SpawnLocation = OwnerCharacter->GetActorLocation() + (OwnerCharacter->GetActorForwardVector() * 100.0f);
+  } else {
+    // Controller vs ise GetOwner()->GetActorLocation()
+    SpawnLocation = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
+  }
+
+  // 2. TÜCCARDAN ALINANLARI ÇANTAYA YERLEŞTİR VEYA YERE AT
+  for (const FDataTableRowHandle& RequestItem : TraderOfferItems) {
+    if (RequestItem.IsNull()) continue;
+
+    // TryAddItem, eşyayı Tetris çantasına yerleştirmeye çalışır
+    bool bSuccess = PlayerInventory->TryAddItem(RequestItem);
+    
+    if (bSuccess) {
+      UE_LOG(LogTemp, Display, TEXT("[TRADE] Alinan '%s' basariyla Tetris cantaya eklendi."), *RequestItem.RowName.ToString());
+      
+      // Çanta yükseltmesi (Backpack) kontrolü
+      const FItemDBRow* ItemRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::BackpackCheck"));
+      if (ItemRowCheck && ItemRowCheck->ItemType == EItemType::Backpack) {
+        HandleBackpackUpgrade(RequestItem, PlayerInventory);
+      }
+
+    } else {
+      UE_LOG(LogTemp, Error, TEXT("[TRADE] Cantada yer yok! '%s' yere atiliyor (Drop)."), *RequestItem.RowName.ToString());
+      
+      // Yere Atma Islemi (Spawn AWorldItemActor)
+      if (GetWorld()) {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+        AWorldItemActor* SpawnedItem = GetWorld()->SpawnActor<AWorldItemActor>(
+            AWorldItemActor::StaticClass(), 
+            SpawnLocation, 
+            FRotator::ZeroRotator, 
+            SpawnParams
+        );
+
+        if (SpawnedItem) {
+          SpawnedItem->InitializeItemData(RequestItem);
+        }
+      }
     }
   }
 }
 
-bool UTradeComponent::Server_SellItem_Validate(
-    FDataTableRowHandle ItemToSell, UInventoryComponent *PlayerInventory) {
+bool UTradeComponent::Server_ExecuteTrade_Validate(
+    const TArray<FDataTableRowHandle>& PlayerOfferItems,
+    const TArray<FDataTableRowHandle>& TraderOfferItems,
+    UPostApocInventoryComponent* PlayerInventory) {
   return true;
 }
 
-// EŞYA SATIN ALMA MANTIĞI
-void UTradeComponent::Server_BuyItem_Implementation(
-    FDataTableRowHandle ItemToBuy, UInventoryComponent *PlayerInventory) {
+// ============================================================
+//  ÇANTA YÜKSELTME — HandleBackpackUpgrade
+//  Satın alınan çantanın ExtraCapacity değeri kadar ızgara
+//  satır sayısını (GridRows) artırır.
+//  Tarkov mantığı: büyük çanta = daha fazla ızgara alanı.
+// ============================================================
+void UTradeComponent::HandleBackpackUpgrade(
+    FDataTableRowHandle BackpackItem,
+    UPostApocInventoryComponent *PlayerInventory) {
 
-  if (!PlayerInventory || ItemToBuy.IsNull())
+  if (!PlayerInventory || BackpackItem.IsNull())
     return;
 
   const FItemDBRow *ItemRow =
-      ItemToBuy.GetRow<FItemDBRow>(TEXT("TradeComponent::Server_BuyItem"));
-  if (!ItemRow)
-    return;
+      BackpackItem.GetRow<FItemDBRow>(TEXT("TradeComponent::HandleBackpackUpgrade"));
 
-  // 1. KONTROL: Para yetiyor mu?
-  if (CurrentMoney < ItemRow->ItemValue) {
-    // Burada Blueprint'e "Yetersiz Para" mesajı gönderebilirsin.
-    return;
-  }
+  if (ItemRow && ItemRow->ExtraCapacity > 0) {
+    // ExtraCapacity'yi ızgara satır sayısına ekle
+    // (Her satır = 1 birim yükseklik = GridColumns adet ekstra slot)
+    PlayerInventory->GridRows += ItemRow->ExtraCapacity;
 
-  // 2. KONTROL: Çantada yer/ağırlık var mı?
-  // Not: Envanterindeki 'GetTotalWeight' ve 'GetMaxWeight' fonksiyonlarını
-  // kullanıyoruz.
-  float NewWeight = PlayerInventory->GetTotalWeight() + ItemRow->ItemWeight;
-  if (NewWeight > PlayerInventory->GetMaxWeight())
-    return;
-
-  // 3. İŞLEM: Parayı düş ve eşyayı ver
-  CurrentMoney -= ItemRow->ItemValue;
-  PlayerInventory->AddItem(ItemToBuy, 1);
-
-  // 4. ÖZEL DURUM: Eğer bu bir çanta ise kapasiteyi kalıcı olarak artır
-  if (ItemRow->ItemType == EItemType::Backpack) {
-    HandleBackpackUpgrade(ItemToBuy, PlayerInventory);
-  }
-}
-
-bool UTradeComponent::Server_BuyItem_Validate(
-    FDataTableRowHandle ItemToBuy, UInventoryComponent *PlayerInventory) {
-  return true;
-}
-
-// ÇANTA YÜKSELTME SİSTEMİ
-void UTradeComponent::HandleBackpackUpgrade(
-    FDataTableRowHandle BackpackItem, UInventoryComponent *PlayerInventory) {
-
-  if (PlayerInventory && !BackpackItem.IsNull()) {
-    const FItemDBRow *ItemRow = BackpackItem.GetRow<FItemDBRow>(
-        TEXT("TradeComponent::HandleBackpackUpgrade"));
-    if (ItemRow) {
-      // Eşya verisindeki 'ExtraCapacity' değerini envanterin limitine
-      // ekliyoruz.
-      PlayerInventory->SetMaxWeight(PlayerInventory->GetMaxWeight() +
-                                    ItemRow->ExtraCapacity);
-    }
+    UE_LOG(LogTemp, Log,
+           TEXT("[TRADE] Çanta yükseltmesi yapıldı. Yeni ızgara satır sayısı: %d"),
+           PlayerInventory->GridRows);
   }
 }

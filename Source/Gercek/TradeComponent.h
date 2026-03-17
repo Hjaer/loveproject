@@ -5,7 +5,7 @@
 // --- Standard Unreal includes first ---
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
-#include "InventoryComponent.h"
+#include "PostApocInventoryTypes.h"
 #include "ItemTypes.h"
 #include "Net/UnrealNetwork.h"
 
@@ -37,25 +37,16 @@ public:
   float CurrentMoney;
 
   /**
-   * EŞYA SATIŞI (Server_SellItem):
-   * Oyuncunun envanterinden bir eşyayı siler ve 'ItemValue' değerini parasına
-   * ekler.
-   * @param ItemToSell: Satılacak eşyanın veri tablosu satır verisi (Handle).
-   * @param PlayerInventory: İşlemin yapılacağı envanter bileşeni.
+   * YENI TICARET SISTEMI (Server_ExecuteTrade):
+   * 1. Oyuncunun teklif ettigi esyalari (PlayerOfferItems) envanterden siler.
+   * 2. Tuccarin teklif ettigi esyalari (TraderOfferItems) oyuncu envanterine
+   * eklemeye calisir. Eger yer yoksa (TryAddItem false donerse) esyayi oyuncunun
+   * onunde (dunyada) Spawn eder.
    */
   UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category = "Ticaret")
-  void Server_SellItem(FDataTableRowHandle ItemToSell,
-                       class UInventoryComponent *PlayerInventory);
-
-  /**
-   * EŞYA ALIMI (Server_BuyItem):
-   * Parayı düşer, ağırlık kontrolü yapar ve uygunsa eşyayı envantere ekler.
-   * @param ItemToBuy: Alınacak eşyanın veri tablosu satır verisi (Handle).
-   * @param PlayerInventory: Eşyanın ekleneceği envanter bileşeni.
-   */
-  UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category = "Ticaret")
-  void Server_BuyItem(FDataTableRowHandle ItemToBuy,
-                      class UInventoryComponent *PlayerInventory);
+  void Server_ExecuteTrade(const TArray<FDataTableRowHandle>& PlayerOfferItems,
+                           const TArray<FDataTableRowHandle>& TraderOfferItems,
+                           class UPostApocInventoryComponent* PlayerInventory);
 
   /**
    * PARA EKLEME/ÇIKARMA:
@@ -71,5 +62,5 @@ protected:
    * (İsim bazlı veya EItemType üzerinden kontrol sağlanabilir)
    */
   void HandleBackpackUpgrade(FDataTableRowHandle BackpackItem,
-                             class UInventoryComponent *PlayerInventory);
+                             class UPostApocInventoryComponent *PlayerInventory);
 };

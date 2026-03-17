@@ -17,7 +17,7 @@
 #include "Interactable.h"
 // #include "InventoryComponent.h" -- Eski liste-tabanlı envanter kaldırıldı.
 #include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
-#include "InventoryWidget.h"
+// #include "InventoryWidget.h" - Artik Blueprint uzerinden calisiyor.
 #include "TimerManager.h"
 #include "WorldItemActor.h"
 // Replication için gerekli include (EKLEME)
@@ -568,17 +568,27 @@ void AGercekCharacter::Interact() {
     return;
   }
 
-  // --- SINGLE RESPONSIBILITY ---
-  // WorldItemActor::OnInteract_Implementation owns:
-  //   - FindComponentByClass<UInventoryComponent>()
-  //   - AddItem()
-  //   - Destroy()
-  // We do NOT duplicate those calls here. Doing so causes a dangling
-  // pointer crash when Destroy() is called on an already-destroyed actor.
-  IInteractable::Execute_OnInteract(CurrentInteractable, this);
+  // Yeni Mantık: Etkileşime geçilen nesnenin verisini alıp bizzat çantaya ekle
+  FDataTableRowHandle ItemData = IInteractable::Execute_GetItemData(CurrentInteractable);
+
+  if (!ItemData.IsNull() && InventoryComponent) {
+    // 1. Envantere eklemeyi dene
+    if (InventoryComponent->TryAddItem(ItemData)) {
+      // 2. Başarılıysa dünyadaki objeyi sil
+      CurrentInteractable->Destroy();
+    } else {
+      // 3. Başarısızsa oyuncuyu uyar
+      if (GEngine) {
+        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, TEXT("[Envanter] Esya icin yeterli yer yok."));
+      }
+    }
+  } else {
+    // Eşya verisi yoksa veya envanter bileşeni yoksa klasik etkileşim (Örn: kapı açma)
+    IInteractable::Execute_OnInteract(CurrentInteractable, this);
+  }
 
   // After the interact, the actor may or may not have been destroyed.
-  // We clear our reference regardless — it's either gone or no longer targeted.
+  // We clear our reference regardless.
   CurrentInteractable = nullptr;
   CurrentInteractItemName = TEXT("");
 
@@ -593,17 +603,11 @@ void AGercekCharacter::Interact() {
     InteractWidget->SetVisibility(ESlateVisibility::Hidden);
   }
 
-  // If the inventory widget is open, trigger a UI refresh (type-safe).
+  // If the inventory widget is open, trigger a UI refresh using reflection.
   if (IsValid(InventoryWidget)) {
-    if (UInventoryWidget *TypedInventoryWidget =
-            Cast<UInventoryWidget>(InventoryWidget)) {
-      TypedInventoryWidget->RefreshInventory();
-    } else {
-      UFunction *RefreshFunc =
-          InventoryWidget->FindFunction(TEXT("RefreshInventory"));
-      if (RefreshFunc) {
-        InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
-      }
+    UFunction *RefreshFunc = InventoryWidget->FindFunction(TEXT("RefreshInventory"));
+    if (RefreshFunc) {
+      InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
     }
   }
 }
@@ -622,10 +626,6 @@ void AGercekCharacter::ToggleInventory() {
     InventoryWidget =
         CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
     if (IsValid(InventoryWidget)) {
-      // SetInventoryComponent: InventoryWidget hâlâ UInventoryComponent* bekliyor.
-      // UPostApocInventoryComponent'e geçiş tamamlandığında bu bağlantı
-      // UInventoryWidget güncellenince yeniden kurulacak.
-      // TypedInventoryWidget->SetInventoryComponent(InventoryComponent);
       InventoryWidget->AddToViewport(10);
       InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
     }
@@ -653,10 +653,9 @@ void AGercekCharacter::ToggleInventory() {
     // Fareyi göster.
     PC->bShowMouseCursor = true;
 
-    // Oyun InputAction'ları hâlâ çalışsın (Tab/Esc ile tekrar kapanabilsin),
-    // ama mouse bakış girdisi Look() içindeki guard tarafından kesilir.
-    FInputModeGameAndUI UIMode;
-    // Widget'a focus ver — klavye eventi de UI'ya ulaşsın.
+    // Sadece UI girdilerini kabul et (Game Only / UI Only geçişi)
+    FInputModeUIOnly UIMode;
+    // Widget'a focus ver
     UIMode.SetWidgetToFocus(InventoryWidget->TakeWidget());
     // Tam ekranda farenin pencere dışına çıkmasını engelle.
     UIMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);

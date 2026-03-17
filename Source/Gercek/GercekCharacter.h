@@ -7,7 +7,7 @@
 #include "InputMappingContext.h"
 #include "ItemTypes.h"              // EItemType, EItemRarity, FItemDBRow
 #include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
-#include "GercekCharacter.gsenerated.h"
+#include "GercekCharacter.generated.h"
 // clang-format on
 
 // Etkileşim hedefi değiştiğinde veya kaybolduğunda yıyınlı (broadcast) giden
@@ -196,15 +196,16 @@ protected:
   void ShowInventoryDetails();
 
   // ==== ÇANTADAN ETKİLEŞİM YETENEKLERİ (USE & DROP) ====
-  
-  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory Action")
-  void UseItemFromInventory(const FDataTableRowHandle& ItemRowHandle);
 
   UFUNCTION(BlueprintCallable, Category = "Survival | Inventory Action")
-  void DropItemFromInventory(const FDataTableRowHandle& ItemRowHandle);
+  void UseItemFromInventory(const FDataTableRowHandle &ItemRowHandle);
+
+  UFUNCTION(BlueprintCallable, Category = "Survival | Inventory Action")
+  void DropItemFromInventory(const FDataTableRowHandle &ItemRowHandle);
 
   UFUNCTION(BlueprintCallable, Category = "Survival | Drops")
-  AActor* SpawnItemInWorld(const FDataTableRowHandle& ItemRowHandle, FVector SpawnLocation);
+  AActor *SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle,
+                           FVector SpawnLocation);
 
   // Blueprint-safe weight ratio getter.
   // WBP_PlayerHUD bu fonksiyonu kullanmalı, WeightPercentage property'sini
@@ -273,4 +274,4 @@ protected:
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Stats")
   float InjuredSprintSpeed;
-};  
+};
