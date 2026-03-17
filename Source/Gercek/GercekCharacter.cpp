@@ -15,13 +15,14 @@
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interactable.h"
-// #include "InventoryComponent.h" -- Eski liste-tabanlı envanter kaldırıldı.
-#include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
-// #include "InventoryWidget.h" - Artik Blueprint uzerinden calisiyor.
-#include "TimerManager.h"
-#include "WorldItemActor.h"
-// Replication için gerekli include (EKLEME)
+#include "Kismet/KismetTextLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "PostApocInventoryTypes.h"
+#include "PostApocItemTypes.h"
+#include "TimerManager.h"
+#include "TradeComponent.h"
+#include "WorldItemActor.h"
+
 
 // Sets default values
 AGercekCharacter::AGercekCharacter() {
@@ -120,7 +121,7 @@ void AGercekCharacter::GetLifetimeReplicatedProps(
   DOREPLIFETIME(AGercekCharacter, Stamina);
   DOREPLIFETIME(AGercekCharacter, Hunger);
   DOREPLIFETIME(AGercekCharacter, Thirst);
-  
+
   // Ticaret XP ve Bilgi Seviyesi
   DOREPLIFETIME(AGercekCharacter, TradeXP);
   DOREPLIFETIME(AGercekCharacter, CurrentKnowledge);
@@ -130,7 +131,8 @@ void AGercekCharacter::GetLifetimeReplicatedProps(
 
 void AGercekCharacter::AddTradeXP(float Amount) {
   // Sadece yetkili sunucuda çalışır
-  if (!HasAuthority()) return;
+  if (!HasAuthority())
+    return;
 
   TradeXP += Amount;
 
@@ -144,25 +146,35 @@ void AGercekCharacter::AddTradeXP(float Amount) {
   }
 }
 
+// Meryem ve Hazar için not:
+// Bu fonksiyon "const" olarak işaretlenmiştir, çünkü karakterin state (durum)
+// bilgisini değiştirmez; sadece girilen BaseValue argümanına ve oyuncunun
+// sahip olduğu Trade Knowledge XP seviyesine bağlı olarak okuma (read-only)
+// yapar.
 FText AGercekCharacter::GetKnowledgeAdjustedValue(float BaseValue) const {
   switch (CurrentKnowledge) {
-    case ETradeKnowledge::Novice:
-      // Acemi: Değeri hiç bilemez
-      return FText::FromString(TEXT("???"));
-      
-    case ETradeKnowledge::Apprentice: {
-      // Çırak: +/- %33 tahmin yürütebilir
-      int32 MinVal = FMath::RoundToInt(BaseValue * 0.67f);
-      int32 MaxVal = FMath::RoundToInt(BaseValue * 1.33f);
-      return FText::FromString(FString::Printf(TEXT("~ %d - %d"), MinVal, MaxVal));
-    }
-      
-    case ETradeKnowledge::Expert:
-      // Uzman: Tam değeri bilir
-      return FText::FromString(FString::FromInt(FMath::RoundToInt(BaseValue)));
-      
-    default:
-      return FText::FromString(TEXT("???"));
+  case ETradeKnowledge::Novice:
+    // Acemi: Değeri hiç bilemez, soru işareti döneriz.
+    return FText::FromString(TEXT("???"));
+
+  case ETradeKnowledge::Apprentice: {
+    // Çırak: %33 hata/yanılma payı ile tahmin verebilir.
+    int32 MinVal = FMath::RoundToInt(BaseValue * 0.67f);
+    int32 MaxVal = FMath::RoundToInt(BaseValue * 1.33f);
+
+    // Tahmin aralığı (Min - Max) örneğin: "~ 75 - 125" formatı.
+    return FText::FromString(
+        FString::Printf(TEXT("~ %d - %d"), MinVal, MaxVal));
+  }
+
+  case ETradeKnowledge::Expert: {
+    // Uzman: Tam değeri noktası virgülüne hatasız bilir.
+    return FText::FromString(FString::FromInt(FMath::RoundToInt(BaseValue)));
+  }
+
+  default:
+    // Fallback
+    return FText::FromString(TEXT("???"));
   }
 }
 

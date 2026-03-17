@@ -25,6 +25,12 @@ class GERCEK_API AGercekCharacter : public ACharacter {
   GENERATED_BODY()
 
 public:
+  // Meryem ve Hazar için not:
+  // BP tabanlı UI erişimini garanti altına almak adına bu fonksiyon
+  // Class'ın en üst public: kısmında yer almalıdır. (Visibility check)
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PostApoc - Knowledge")
+  FText GetKnowledgeAdjustedValue(float BaseValue) const;
+
   AGercekCharacter();
 
 protected:
@@ -181,9 +187,6 @@ public:
   UFUNCTION(BlueprintCallable, Category = "Trade Knowledge")
   void AddTradeXP(float Amount);
 
-  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Trade Knowledge")
-  FText GetKnowledgeAdjustedValue(float BaseValue) const;
-
   AActor *CurrentInteractable;
 
   // Editörden IA_Interact ve IMC_Default seçebilmek için
@@ -290,4 +293,4 @@ protected:
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Stats")
   float InjuredSprintSpeed;
-};
+};
