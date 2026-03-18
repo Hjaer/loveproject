@@ -31,6 +31,7 @@ public:
 
 protected:
   virtual void BeginPlay() override;
+  virtual void PawnClientRestart() override;
 
 public:
   virtual void Tick(float DeltaTime) override;
@@ -58,6 +59,13 @@ public:
 protected:
   void ApplyItemEffect(EItemType Type, float Amount);
   void ResetStaminaRecoveryBuff();
+
+  // Son hasar alınan zamanı takip eden sayış (Health regen lockout için)
+  float LastDamageTakenTime;
+
+  // Haşar sistemi ile entegre: Son hasar zamanını günceller
+  virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+                            class AController* EventInstigator, AActor* DamageCauser) override;
 
   EItemType PendingConsumeType;
   float PendingConsumeAmount;

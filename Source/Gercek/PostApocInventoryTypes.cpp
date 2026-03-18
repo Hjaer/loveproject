@@ -7,6 +7,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "PostApocGridItem.h"
 #include "GercekCharacter.h"
+#include "Net/UnrealNetwork.h"
 
 // ============================================================
 //  UPostApocInventoryComponent — Implementasyon
@@ -22,7 +23,7 @@ UPostApocInventoryComponent::UPostApocInventoryComponent()
 void UPostApocInventoryComponent::BeginPlay()
 {
     Super::BeginPlay();
-    // Başlangıçta ızgara boş; OccupiedSlots zaten TMap ile sıfırlanmış.
+    // Başlangıçta ızgara boş; OccupiedSlotsArray sıfırdan başlar.
 }
 
 // ------------------------------------------------------------
@@ -76,7 +77,16 @@ bool UPostApocInventoryComponent::CheckSpace(
             // --- Çakışma Kontrolü ---
             // Bu koordinatta zaten bir eşya varsa yer yok.
             const FIntPoint CellToCheck(CheckX, CheckY);
-            if (OccupiedSlots.Contains(CellToCheck))
+            bool bIsOccupied = false;
+            for (const FGridSlotData& SlotData : OccupiedSlotsArray)
+            {
+                if (SlotData.Location == CellToCheck)
+                {
+                    bIsOccupied = true;
+                    break;
+                }
+            }
+            if (bIsOccupied)
             {
                 return false;
             }
@@ -137,8 +147,10 @@ bool UPostApocInventoryComponent::TryAddItem(FDataTableRowHandle ItemRowHandle)
         {
             for (int32 Col = 0; Col < EffectiveWidth; ++Col)
             {
-                const FIntPoint Cell(FoundLocation.X + Col, FoundLocation.Y + Row);
-                OccupiedSlots.Add(Cell, ItemRowHandle.RowName);
+                FGridSlotData NewSlot;
+                NewSlot.Location = FIntPoint(FoundLocation.X + Col, FoundLocation.Y + Row);
+                NewSlot.ItemID = ItemRowHandle.RowName;
+                OccupiedSlotsArray.Add(NewSlot);
             }
         }
 
@@ -198,32 +210,27 @@ bool UPostApocInventoryComponent::RemoveItemFromGrid(FName ItemRowName)
         return false;
     }
 
-    // Silinecek hücreleri topla (TMap iterasyonu sırasında mutasyon yapılmaz).
-    TArray<FIntPoint> CellsToRemove;
-    for (const TPair<FIntPoint, FName>& Pair : OccupiedSlots)
+    bool bRemovedAny = false;
+    for (int32 i = OccupiedSlotsArray.Num() - 1; i >= 0; --i)
     {
-        if (Pair.Value == ItemRowName)
+        if (OccupiedSlotsArray[i].ItemID == ItemRowName)
         {
-            CellsToRemove.Add(Pair.Key);
+            OccupiedSlotsArray.RemoveAt(i);
+            bRemovedAny = true;
         }
     }
 
-    if (CellsToRemove.Num() == 0)
+    if (!bRemovedAny)
     {
         UE_LOG(LogTemp, Warning,
-               TEXT("[Grid Inventory] RemoveItemFromGrid: '%s' izgararada bulunamadi."),
+               TEXT("[Grid Inventory] RemoveItemFromGrid: '%s' izgarada bulunamadi."),
                *ItemRowName.ToString());
         return false;
     }
 
-    for (const FIntPoint& Cell : CellsToRemove)
-    {
-        OccupiedSlots.Remove(Cell);
-    }
-
     UE_LOG(LogTemp, Log,
-           TEXT("[Grid Inventory] '%s' izgaradan kaldirildi (%d hucre serbest bırakıldı)."),
-           *ItemRowName.ToString(), CellsToRemove.Num());
+           TEXT("[Grid Inventory] '%s' izgaradan kaldirildi."),
+           *ItemRowName.ToString());
     return true;
 }
 
@@ -241,9 +248,9 @@ int32 UPostApocInventoryComponent::GetItemCountInGrid(FName ItemRowName) const
     }
 
     int32 Count = 0;
-    for (const TPair<FIntPoint, FName>& Pair : OccupiedSlots)
+    for (const FGridSlotData& SlotData : OccupiedSlotsArray)
     {
-        if (Pair.Value == ItemRowName)
+        if (SlotData.ItemID == ItemRowName)
         {
             ++Count;
         }
@@ -256,19 +263,19 @@ float UPostApocInventoryComponent::GetInventoryValue() const
     float TotalValue = 0.0f;
     TSet<FName> CountedItems;
 
-    for (const TPair<FIntPoint, FName>& Pair : OccupiedSlots)
+    for (const FGridSlotData& SlotData : OccupiedSlotsArray)
     {
-        if (!CountedItems.Contains(Pair.Value))
+        if (!CountedItems.Contains(SlotData.ItemID))
         {
             if (ItemDataTable)
             {
-                const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(Pair.Value, TEXT("GetInventoryValue"));
+                const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(SlotData.ItemID, TEXT("GetInventoryValue"));
                 if (ItemData)
                 {
                     TotalValue += ItemData->BaseValue;
                 }
             }
-            CountedItems.Add(Pair.Value);
+            CountedItems.Add(SlotData.ItemID);
         }
     }
     return TotalValue;
@@ -308,9 +315,19 @@ void UPostApocInventoryComponent::NativeRefreshUI(UUserWidget* GridWidget)
             }
 
             // Hücrede bir eşya var mı?
-            if (OccupiedSlots.Contains(CurrentSlot))
+            FName FoundItemName = NAME_None;
+            for (const FGridSlotData& SlotData : OccupiedSlotsArray)
             {
-                FName RowName = OccupiedSlots[CurrentSlot];
+                if (SlotData.Location == CurrentSlot)
+                {
+                    FoundItemName = SlotData.ItemID;
+                    break;
+                }
+            }
+
+            if (FoundItemName != NAME_None)
+            {
+                FName RowName = FoundItemName;
 
                 // Data Table'dan eşya verisini çek (Boyut bilgisi için)
                 const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(RowName, TEXT("NativeRefreshGrid"));
@@ -323,6 +340,9 @@ void UPostApocInventoryComponent::NativeRefreshUI(UUserWidget* GridWidget)
                     // Veriyi enjekte et
                     NewItemWidget->ItemVerisi.DataTable = ItemDataTable;
                     NewItemWidget->ItemVerisi.RowName = RowName;
+
+                    // Arayüzü C++ üzerinden zorla yenile (Grid ikonlarının görünmesi için şart)
+                    NewItemWidget->RefreshVisuals();
 
                     // Canvas üzerine yerleştir
                     UCanvasPanelSlot* CanvasSlot = GridCanvas->AddChildToCanvas(NewItemWidget);
@@ -375,7 +395,10 @@ bool UPostApocInventoryComponent::HandleItemDrop(FName ItemRowName, FIntPoint Ne
              {
                  for (int32 Col = 0; Col < ItemData->ItemSize.X; ++Col)
                  {
-                     OccupiedSlots.Add(FIntPoint(NewLocation.X + Col, NewLocation.Y + Row), ItemRowName);
+                     FGridSlotData NewSlot;
+                     NewSlot.Location = FIntPoint(NewLocation.X + Col, NewLocation.Y + Row);
+                     NewSlot.ItemID = ItemRowName;
+                     OccupiedSlotsArray.Add(NewSlot);
                  }
              }
              return true;
@@ -384,4 +407,28 @@ bool UPostApocInventoryComponent::HandleItemDrop(FName ItemRowName, FIntPoint Ne
     
     // Başarısız olursa eski yerine geri dönmeyi veya en uygun yere atmayı deneyebiliriz
     return TryAddItem(ItemHandle);
+}
+
+void UPostApocInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(UPostApocInventoryComponent, OccupiedSlotsArray);
+}
+
+void UPostApocInventoryComponent::OnRep_GridUpdated()
+{
+    // Arayüzü yenilemek için delegate'i tetikliyoruz. Karakter ya da arayüz bu eventi dinleyebilir
+    OnGridUpdated.Broadcast();
+    UE_LOG(LogTemp, Log, TEXT("[Grid Inventory] OnRep_GridUpdated tetiklendi, UI yenilenmeli."));
+}
+
+TMap<FIntPoint, FName> UPostApocInventoryComponent::GetOccupiedSlots() const
+{
+    TMap<FIntPoint, FName> Map;
+    for (const FGridSlotData& SlotData : OccupiedSlotsArray)
+    {
+        Map.Add(SlotData.Location, SlotData.ItemID);
+    }
+    return Map;
 }

@@ -99,7 +99,7 @@ protected:
      */
     virtual void NativePreConstruct() override;
 
-private:
+public:
     // ================================================================
     //  YARDIMCI FONKSİYON
     // ================================================================

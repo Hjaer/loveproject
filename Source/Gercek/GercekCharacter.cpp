@@ -40,6 +40,11 @@ AGercekCharacter::AGercekCharacter() {
   FpsCameraComponent->SetupAttachment(RootComponent);
   FpsCameraComponent->bUsePawnControlRotation = true;
 
+  // FPS Karakter Rotasyon Kilitleri (Kritik)
+  bUseControllerRotationPitch = false;
+  bUseControllerRotationYaw = true;
+  bUseControllerRotationRoll = false;
+
   // Ses Bileşeni Oluşturma
   BreathingAudioComponent =
       CreateDefaultSubobject<UAudioComponent>(TEXT("BreathingAudioComponent"));
@@ -90,6 +95,7 @@ AGercekCharacter::AGercekCharacter() {
   if (GetCharacterMovement()) {
     GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
     GetCharacterMovement()->MaxWalkSpeed = 300.0f; // Normal yürüme hızı
+    GetCharacterMovement()->bOrientRotationToMovement = false; // FPS için kapalı olmalı
 
     // Başlangıç hız limitleri
     BaseWalkSpeed = 300.0f;
@@ -105,6 +111,9 @@ AGercekCharacter::AGercekCharacter() {
   // Ticaret / XP Başlangıç
   TradeXP = 0.0f;
   CurrentKnowledge = ETradeKnowledge::Novice;
+
+  // Son hasar alma zamanını başlangıçta çok küçük bir değere ayarla (hemen regen başlasın)
+  LastDamageTakenTime = -999.0f;
 }
 
 // --- REPLICATION KAYIT FONKSİYONU (EKLEME) ---
@@ -216,6 +225,28 @@ void AGercekCharacter::BeginPlay() {
   }
 }
 
+void AGercekCharacter::PawnClientRestart() {
+  Super::PawnClientRestart();
+
+  if (APlayerController *PlayerController = Cast<APlayerController>(GetController())) {
+    
+    // Oyun/UI odak sorunlarını engellemek için fare ve girdi modunu zorla GameOnly yap.
+    FInputModeGameOnly GameMode;
+    PlayerController->SetInputMode(GameMode);
+    PlayerController->bShowMouseCursor = false;
+
+    if (UEnhancedInputLocalPlayerSubsystem *Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer())) {
+      // Sıkışmış ve eski tuş atamalarını (stuck states) temizle
+      Subsystem->ClearAllMappings();
+
+      if (DefaultMappingContext) {
+        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        UE_LOG(LogTemp, Display, TEXT("[EnhancedInput] DefaultMappingContext forcibly injected and UI Input cleared via C++."));
+      }
+    }
+  }
+}
+
 // Called every frame
 void AGercekCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
@@ -253,11 +284,33 @@ void AGercekCharacter::Tick(float DeltaTime) {
       Health = FMath::Clamp(Health, 0.0f, MaxHealth);
     }
 
-    // Tokluk İyileşmesi (Hem Açlık hem Susuzluk %75 üzerindeyse ve Radyasyon
-    // düşükse canı artır)
-    if (Hunger > 75.0f && Thirst > 75.0f && Radiation <= 20.0f) {
-      Health += 0.5f * DeltaTime;
-      Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+    // ==== SAĞLIK YENİLENMESİ (KADEMELİ DİZAYN) ====
+    // Kural 1: Can 50'nin üzyerindeyse — otomatik yenilenme (saniyede 0.5 hp)
+    // Kural 2: Can 50 veya altındaysa — Otomatik yenilenme YOKTUR.
+    //   * Eşya kullanıldığında (ApplyItemEffect::Med) regen gersçekleşir.
+    //   * SON 15 SANİYEDE HİÇ HASAR ALINMAZSA yenilenme başlar.
+    const float CurrentTime    = GetWorld()->GetTimeSeconds();
+    const float TimeSinceDamage = CurrentTime - LastDamageTakenTime;
+
+    const bool bWellFed        = Hunger > 75.0f && Thirst > 75.0f && Radiation <= 20.0f;
+
+    if (Health > 50.0f)
+    {
+      // --- Can 50 Üzeri: Otomatik regen, tokluk ve radyasyon peşi sıra ---
+      if (bWellFed)
+      {
+        Health += 0.5f * DeltaTime;
+        Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+      }
+    }
+    else
+    {
+      // --- Can 50 Altı: Sadece 15 saniye hasar almamışsa regen açılır ---
+      if (bWellFed && TimeSinceDamage >= 15.0f)
+      {
+        Health += 0.5f * DeltaTime;
+        Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+      }
     }
 
     // Gerçekçi zıplama: Tek zıplama her durumda sabit.
@@ -807,6 +860,28 @@ void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {
 
 void AGercekCharacter::ResetStaminaRecoveryBuff() {
   StaminaRecoveryRate = OriginalStaminaRecoveryRate;
+}
+
+// --- HASAR KAYDİ (HealthRegen lockout için) ---
+float AGercekCharacter::TakeDamage(float DamageAmount,
+                                   struct FDamageEvent const& DamageEvent,
+                                   class AController* EventInstigator,
+                                   AActor* DamageCauser)
+{
+  const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+  if (ActualDamage > 0.0f && HasAuthority())
+  {
+    // Son hasar zamanını güncelle (can regen kilidi sıfırlanır)
+    LastDamageTakenTime = GetWorld()->GetTimeSeconds();
+
+    Health -= ActualDamage;
+    Health = FMath::Clamp(Health, 0.0f, MaxHealth);
+
+    UE_LOG(LogTemp, Log, TEXT("[Damage] %.1f hasar alindi. Kalan can: %.1f"), ActualDamage, Health);
+  }
+
+  return ActualDamage;
 }
 
 float AGercekCharacter::GetWeightRatio() const {

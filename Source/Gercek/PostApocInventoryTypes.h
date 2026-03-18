@@ -80,6 +80,25 @@ public:
 //  Aktöre eklenerek 2-boyutlu ızgara mantığını yönetir.
 // ============================================================
 
+// Delegate to notify UI of grid changes
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGridUpdatedDelegate);
+
+// Ağ (Network) üzerinden replike edilebilir Izgara Hücresi verisi
+USTRUCT(BlueprintType)
+struct FGridSlotData {
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FIntPoint Location;
+
+    UPROPERTY()
+    FName ItemID;
+
+    bool operator==(const FGridSlotData& Other) const {
+        return Location == Other.Location && ItemID == Other.ItemID;
+    }
+};
+
 UCLASS(ClassGroup = (PostApoc), meta = (BlueprintSpawnableComponent))
 class GERCEK_API UPostApocInventoryComponent : public UActorComponent {
   GENERATED_BODY()
@@ -116,15 +135,25 @@ public:
   class UDataTable* ItemDataTable;
 
   /**
-   * OccupiedSlots
+   * OccupiedSlotsArray
    *
-   * Her dolu grid hücresinin sol-üst köşe koordinatı (FIntPoint) ->
-   * İlgili eşyanın Row adı (FName). Eşya birden fazla hücre kaplıyorsa
-   * her hücre için ayrı bir kayıt tutulur.
+   * Replikasyona uyumlu, oyuncuların grid (ızgara) slotlarındaki eşya
+   * konumlarını tutan dizi.
    */
-  UPROPERTY(VisibleAnywhere, BlueprintReadOnly,
-            Category = "PostApoc Inventory | Grid")
-  TMap<FIntPoint, FName> OccupiedSlots;
+  UPROPERTY(ReplicatedUsing = OnRep_GridUpdated)
+  TArray<FGridSlotData> OccupiedSlotsArray;
+
+  /**
+   * Izgara güncellendiğinde UI'yi tetiklemek için Delegate
+   */
+  UPROPERTY(BlueprintAssignable, Category = "PostApoc Inventory | Events")
+  FOnGridUpdatedDelegate OnGridUpdated;
+
+  /**
+   * Sunucudan OccupiedSlotsArray güncellendiğinde istemcilerde (client) çalışır.
+   */
+  UFUNCTION()
+  void OnRep_GridUpdated();
 
 public:
   /**
@@ -257,7 +286,5 @@ public:
 
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Grid")
-  const TMap<FIntPoint, FName> &GetOccupiedSlots() const {
-    return OccupiedSlots;
-  }
+  TMap<FIntPoint, FName> GetOccupiedSlots() const;
 };
