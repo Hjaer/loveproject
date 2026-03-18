@@ -2,12 +2,15 @@
 
 #include "GercekCharacter.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "CollisionQueryParams.h"
 #include "Components/AudioComponent.h"
+#include "Components/Button.h"
 #include "Components/InputComponent.h"
 #include "Components/PostProcessComponent.h"
+#include "Components/TextBlock.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
@@ -16,16 +19,14 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interactable.h"
 #include "Kismet/KismetTextLibrary.h"
+#include "MerchantBase.h"
 #include "Net/UnrealNetwork.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocItemTypes.h"
 #include "TimerManager.h"
 #include "TradeComponent.h"
 #include "WorldItemActor.h"
-#include "MerchantBase.h"
-#include "Blueprint/WidgetTree.h"
-#include "Components/TextBlock.h"
-#include "Components/Button.h"
+
 
 // Sets default values
 AGercekCharacter::AGercekCharacter() {
@@ -213,7 +214,6 @@ void AGercekCharacter::BeginPlay() {
       HUDWidget->AddToViewport();
     }
   }
-
 }
 
 // Called every frame
@@ -548,8 +548,10 @@ void AGercekCharacter::SetupPlayerInputComponent(
   PlayerInputComponent->BindAction("EnvanterAc", IE_Pressed, this,
                                    &AGercekCharacter::ToggleInventory);
 
-  // Etkileşim (Interact) eylemini bağla (Project Settings -> Input -> Action Mappings)
-  PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AGercekCharacter::Interact);
+  // Etkileşim (Interact) eylemini bağla (Project Settings -> Input -> Action
+  // Mappings)
+  PlayerInputComponent->BindAction("Interact", IE_Pressed, this,
+                                   &AGercekCharacter::Interact);
 }
 
 void AGercekCharacter::StartSprint() {
@@ -594,78 +596,80 @@ void AGercekCharacter::Jump() {
 }
 
 // --- YENİ UZMAN (AAA) ETKİLEŞİM SİSTEMİ ---
-AActor* AGercekCharacter::PerformInteractionTrace() const
-{
-    if (!FpsCameraComponent) return nullptr;
-
-    FVector StartPos = FpsCameraComponent->GetComponentLocation();
-    FVector EndPos = StartPos + (FpsCameraComponent->GetForwardVector() * 200.0f);
-
-    FHitResult HitResult;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(this);
-
-    if (GetWorld()->LineTraceSingleByChannel(HitResult, StartPos, EndPos, ECC_Visibility, Params))
-    {
-        return HitResult.GetActor();
-    }
+AActor *AGercekCharacter::PerformInteractionTrace() const {
+  if (!FpsCameraComponent)
     return nullptr;
+
+  FVector StartPos = FpsCameraComponent->GetComponentLocation();
+  FVector EndPos = StartPos + (FpsCameraComponent->GetForwardVector() * 200.0f);
+
+  FHitResult HitResult;
+  FCollisionQueryParams Params;
+  Params.AddIgnoredActor(this);
+
+  if (GetWorld()->LineTraceSingleByChannel(HitResult, StartPos, EndPos,
+                                           ECC_Visibility, Params)) {
+    return HitResult.GetActor();
+  }
+  return nullptr;
 }
 
-FText AGercekCharacter::GetInteractionPrompt() const
-{
-    AActor* HitActor = PerformInteractionTrace();
-    if (!HitActor)
-        return FText::GetEmpty();
-
-    // Tüccar Kontrolü
-    if (AMerchantBase* Merchant = Cast<AMerchantBase>(HitActor))
-    {
-        FString FoundName = Merchant->GetMerchantName().ToString();
-        return FText::FromString(FString::Printf(TEXT("E - Takas %s"), *FoundName));
-    }
-
-    // Klasik Etkileşim Öğeleri Kontrolü
-    if (HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
-    {
-        FText ItemName = IInteractable::Execute_GetInteractableName(HitActor);
-        if (!ItemName.IsEmpty())
-        {
-            return FText::FromString(FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
-        }
-        return FText::FromString(TEXT("E - Al"));
-    }
-
+FText AGercekCharacter::GetInteractionPrompt() const {
+  AActor *HitActor = PerformInteractionTrace();
+  if (!HitActor)
     return FText::GetEmpty();
+
+  // Tüccar Kontrolü
+  if (AMerchantBase *Merchant = Cast<AMerchantBase>(HitActor)) {
+    FString FoundName = Merchant->GetMerchantName().ToString();
+    return FText::FromString(FString::Printf(TEXT("E - Takas %s"), *FoundName));
+  }
+
+  // Klasik Etkileşim Öğeleri Kontrolü
+  if (HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass())) {
+    FText ItemName = IInteractable::Execute_GetInteractableName(HitActor);
+    if (!ItemName.IsEmpty()) {
+      return FText::FromString(
+          FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+    }
+    return FText::FromString(TEXT("E - Al"));
+  }
+
+  return FText::GetEmpty();
 }
 
 void AGercekCharacter::Interact() {
-    // 1. Durum Kontrolü: Ticaret ekranı zaten açıksa kapat ve işlemden çık
-    if (ActiveTradeWidget != nullptr) {
-        CloseTradeScreen();
-        return;
+  // 1. Durum Kontrolü: Ticaret ekranı zaten açıksa kapat ve işlemden çık
+  if (ActiveTradeWidget != nullptr) {
+    CloseTradeScreen();
+    return;
+  }
+
+  if (!FpsCameraComponent)
+    return;
+
+  // 2. Mesafe Belirleme: Kameranın merkezinden tam olarak 200 birim ileriye
+  // ışın at
+  FVector Start = FpsCameraComponent->GetComponentLocation();
+  FVector End = Start + (FpsCameraComponent->GetForwardVector() * 200.0f);
+
+  FHitResult Hit;
+  FCollisionQueryParams Params;
+  Params.AddIgnoredActor(this); // Işının oyuncunun kendisine çarpmasını engelle
+
+  // 3. Işın Gönderme (Raycast): Sadece görünür (Visibility) objelerle
+  // çarpışmayı test et
+  if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility,
+                                           Params)) {
+
+    // 4. Hedef Kontrolü: Çarpılan aktör bir AMerchantBase (Tüccar) sınıfından
+    // ise
+    if (AMerchantBase *HitMerchant = Cast<AMerchantBase>(Hit.GetActor())) {
+
+      // Başarılı hedef eşleşmesi durumunda tüccarın ekranını C++ tarafında aç
+      OpenTradeScreen(HitMerchant);
     }
-
-    if (!FpsCameraComponent) return;
-
-    // 2. Mesafe Belirleme: Kameranın merkezinden tam olarak 200 birim ileriye ışın at
-    FVector Start = FpsCameraComponent->GetComponentLocation();
-    FVector End = Start + (FpsCameraComponent->GetForwardVector() * 200.0f);
-
-    FHitResult Hit;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(this); // Işının oyuncunun kendisine çarpmasını engelle
-
-    // 3. Işın Gönderme (Raycast): Sadece görünür (Visibility) objelerle çarpışmayı test et
-    if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params)) {
-        
-        // 4. Hedef Kontrolü: Çarpılan aktör bir AMerchantBase (Tüccar) sınıfından ise
-        if (AMerchantBase* HitMerchant = Cast<AMerchantBase>(Hit.GetActor())) {
-            
-            // Başarılı hedef eşleşmesi durumunda tüccarın ekranını C++ tarafında aç
-            OpenTradeScreen(HitMerchant);
-        }
-    }
+  }
 }
 
 void AGercekCharacter::ToggleInventory() {
@@ -989,147 +993,156 @@ AGercekCharacter::SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle,
 
 // ==== TİCARET EKRANI YÖNETİMİ ====
 
-void AGercekCharacter::OpenTradeScreen(AMerchantBase* TargetMerchant)
-{
-    // Hedef tüccar geçersizse işlem yapma
-    if (!IsValid(TargetMerchant) || !TradeScreenClass)
-    {
-        return;
+void AGercekCharacter::OpenTradeScreen(AMerchantBase *TargetMerchant) {
+  // Hedef tüccar geçersizse işlem yapma
+  if (!IsValid(TargetMerchant) || !TradeScreenClass) {
+    return;
+  }
+
+  // Aktif tüccarı kaydet
+  ActiveMerchant = TargetMerchant;
+
+  // Halihazırda açık bir takas ekranı yoksa oluştur
+  if (!IsValid(ActiveTradeWidget)) {
+    ActiveTradeWidget = CreateWidget<UUserWidget>(GetWorld(), TradeScreenClass);
+  }
+
+  if (IsValid(ActiveTradeWidget)) {
+    // 1. Ekrandaki TextBlock (Tüccar Adı) güncellemesi
+    UTextBlock *MerchantNameText = Cast<UTextBlock>(
+        ActiveTradeWidget->GetWidgetFromName(TEXT("Txt_MerchantName")));
+    if (MerchantNameText) {
+      MerchantNameText->SetText(TargetMerchant->GetMerchantName());
     }
 
-    // Aktif tüccarı kaydet
-    ActiveMerchant = TargetMerchant;
-
-    // Halihazırda açık bir takas ekranı yoksa oluştur
-    if (!IsValid(ActiveTradeWidget))
-    {
-        ActiveTradeWidget = CreateWidget<UUserWidget>(GetWorld(), TradeScreenClass);
+    // 2. Oyuncu ve Tüccar envanter Izgaralarını (Grid) "Enjekte" et ve C++
+    // üzerinden yenile
+    UUserWidget *TraderGridUI = Cast<UUserWidget>(
+        ActiveTradeWidget->GetWidgetFromName(TEXT("TuccarCanta")));
+    if (TraderGridUI) {
+      UPostApocInventoryComponent *MerchantInv =
+          TargetMerchant->GetMerchantInventory();
+      if (MerchantInv) {
+        // C++ üzerinden Native Refresh (Meryem'in BP loop'larını baypas eder)
+        MerchantInv->NativeRefreshUI(TraderGridUI);
+      }
     }
 
-    if (IsValid(ActiveTradeWidget))
-    {
-        // 1. Ekrandaki TextBlock (Tüccar Adı) güncellemesi
-        UTextBlock* MerchantNameText = Cast<UTextBlock>(ActiveTradeWidget->GetWidgetFromName(TEXT("Txt_MerchantName")));
-        if (MerchantNameText)
-        {
-            MerchantNameText->SetText(TargetMerchant->GetMerchantName());
-        }
-
-        // 2. Oyuncu ve Tüccar envanter Izgaralarını (Grid) "Enjekte" et ve C++ üzerinden yenile
-        UUserWidget* TraderGridUI = Cast<UUserWidget>(ActiveTradeWidget->GetWidgetFromName(TEXT("TuccarCanta")));
-        if (TraderGridUI)
-        {
-            UPostApocInventoryComponent* MerchantInv = TargetMerchant->GetMerchantInventory();
-            if (MerchantInv)
-            {
-                // C++ üzerinden Native Refresh (Meryem'in BP loop'larını baypas eder)
-                MerchantInv->NativeRefreshUI(TraderGridUI);
-            }
-        }
-
-        UUserWidget* PlayerGridUI = Cast<UUserWidget>(ActiveTradeWidget->GetWidgetFromName(TEXT("OyuncuCanta")));
-        if (PlayerGridUI)
-        {
-            if (InventoryComponent)
-            {
-                // C++ üzerinden Native Refresh
-                InventoryComponent->NativeRefreshUI(PlayerGridUI);
-            }
-        }
-
-        // 3. Buton Bağlantıları (Btn_Ayril, Btn_TakasYap) - Doğrudan C++ Fonksiyonlarına Bağlama
-        UButton* ExitButton = Cast<UButton>(ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_Ayril")));
-        if (ExitButton)
-        {
-            ExitButton->OnClicked.Clear();
-            ExitButton->OnClicked.AddDynamic(this, &AGercekCharacter::CloseTradeScreen);
-        }
-
-        UButton* TradeButton = Cast<UButton>(ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_TakasYap")));
-        if (TradeButton)
-        {
-            TradeButton->OnClicked.Clear();
-            TradeButton->OnClicked.AddDynamic(this, &AGercekCharacter::ExecuteTrade);
-        }
-
-        // 4. Arayüzü ekrana ekle ve girdi (input) kontrollerini düzenle
-        ActiveTradeWidget->AddToViewport(20);
-
-        if (APlayerController* PC = Cast<APlayerController>(GetController()))
-        {
-            PC->bShowMouseCursor = true;
-            
-            FInputModeUIOnly UIMode;
-            UIMode.SetWidgetToFocus(ActiveTradeWidget->TakeWidget());
-            UIMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
-            PC->SetInputMode(UIMode);
-        }
+    UUserWidget *PlayerGridUI = Cast<UUserWidget>(
+        ActiveTradeWidget->GetWidgetFromName(TEXT("OyuncuCanta")));
+    if (PlayerGridUI) {
+      if (InventoryComponent) {
+        // C++ üzerinden Native Refresh
+        InventoryComponent->NativeRefreshUI(PlayerGridUI);
+      }
     }
+
+    // 3. Buton Bağlantıları (Btn_Ayril, Btn_TakasYap) - Doğrudan C++
+    // Fonksiyonlarına Bağlama
+    UButton *ExitButton =
+        Cast<UButton>(ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_Ayril")));
+    if (ExitButton) {
+      ExitButton->OnClicked.Clear();
+      ExitButton->OnClicked.AddDynamic(this,
+                                       &AGercekCharacter::CloseTradeScreen);
+    }
+
+    UButton *TradeButton = Cast<UButton>(
+        ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_TakasYap")));
+    if (TradeButton) {
+      TradeButton->OnClicked.Clear();
+      TradeButton->OnClicked.AddDynamic(this, &AGercekCharacter::ExecuteTrade);
+    }
+
+    // 4. Arayüzü ekrana ekle ve girdi (input) kontrollerini düzenle
+    ActiveTradeWidget->AddToViewport(20);
+
+    if (APlayerController *PC = Cast<APlayerController>(GetController())) {
+      PC->bShowMouseCursor = true;
+
+      FInputModeUIOnly UIMode;
+      UIMode.SetWidgetToFocus(ActiveTradeWidget->TakeWidget());
+      UIMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
+      PC->SetInputMode(UIMode);
+    }
+  }
 }
 
-void AGercekCharacter::ExecuteTrade()
-{
-    if (!IsValid(ActiveTradeWidget) || !ActiveMerchant) return;
+void AGercekCharacter::ExecuteTrade() {
+  if (!IsValid(ActiveTradeWidget) || !ActiveMerchant)
+    return;
 
-    // 1. Değer Kontrolü (Barter Value Validation) - Verileri UI'dan Reflection ile çekiyoruz
-    float PlayerValue = 0.0f;
-    float TraderValue = 0.0f;
+  // 1. Değer Kontrolü (Barter Value Validation) - Verileri UI'dan Reflection
+  // ile çekiyoruz
+  float PlayerValue = 0.0f;
+  float TraderValue = 0.0f;
 
-    UFunction* GetPlayerValFunc = ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifToplami"));
-    UFunction* GetMerchantValFunc = ActiveTradeWidget->FindFunction(TEXT("GetTuccarIstekToplami"));
+  UFunction *GetPlayerValFunc =
+      ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifToplami"));
+  UFunction *GetMerchantValFunc =
+      ActiveTradeWidget->FindFunction(TEXT("GetTuccarIstekToplami"));
 
-    if (GetPlayerValFunc) ActiveTradeWidget->ProcessEvent(GetPlayerValFunc, &PlayerValue);
-    if (GetMerchantValFunc) ActiveTradeWidget->ProcessEvent(GetMerchantValFunc, &TraderValue);
+  if (GetPlayerValFunc)
+    ActiveTradeWidget->ProcessEvent(GetPlayerValFunc, &PlayerValue);
+  if (GetMerchantValFunc)
+    ActiveTradeWidget->ProcessEvent(GetMerchantValFunc, &TraderValue);
 
-    // KRİTİK: Oyuncunun teklifi tüccarın isteğini karşılamıyorsa kırmızı uyarı ver ve durdur.
-    if (PlayerValue < TraderValue || PlayerValue <= 0.0f)
-    {
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 4.0f, FColor::Red, TEXT("Yetersiz Takas Değeri! Daha fazla eşya ekle."));
-        }
-        return;
+  // KRİTİK: Oyuncunun teklifi tüccarın isteğini karşılamıyorsa kırmızı uyarı
+  // ver ve durdur.
+  if (PlayerValue < TraderValue || PlayerValue <= 0.0f) {
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(
+          -1, 4.0f, FColor::Red,
+          TEXT("Yetersiz Takas Değeri! Daha fazla eşya ekle."));
     }
+    return;
+  }
 
-    // 2. Takas Edilecek Eşya Listelerinin Toplanması (Listeler UI'daki slotlardan gelir)
-    TArray<FDataTableRowHandle> PlayerOfferItems;
-    TArray<FDataTableRowHandle> MerchantOfferItems;
+  // 2. Takas Edilecek Eşya Listelerinin Toplanması (Listeler UI'daki slotlardan
+  // gelir)
+  TArray<FDataTableRowHandle> PlayerOfferItems;
+  TArray<FDataTableRowHandle> MerchantOfferItems;
 
-    UFunction* GetPlayerListFunc = ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifListesi"));
-    UFunction* GetMerchantListFunc = ActiveTradeWidget->FindFunction(TEXT("GetTuccarTeklifListesi"));
+  UFunction *GetPlayerListFunc =
+      ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifListesi"));
+  UFunction *GetMerchantListFunc =
+      ActiveTradeWidget->FindFunction(TEXT("GetTuccarTeklifListesi"));
 
-    if (GetPlayerListFunc) ActiveTradeWidget->ProcessEvent(GetPlayerListFunc, &PlayerOfferItems);
-    if (GetMerchantListFunc) ActiveTradeWidget->ProcessEvent(GetMerchantListFunc, &MerchantOfferItems);
+  if (GetPlayerListFunc)
+    ActiveTradeWidget->ProcessEvent(GetPlayerListFunc, &PlayerOfferItems);
+  if (GetMerchantListFunc)
+    ActiveTradeWidget->ProcessEvent(GetMerchantListFunc, &MerchantOfferItems);
 
-    // 3. Sunucu Tarafında Asıl Eşya Yer Değiştirme ve XP İşlemini Gerçekleştir (RPC)
-    UTradeComponent* TradeComp = FindComponentByClass<UTradeComponent>();
-    if (TradeComp && ActiveMerchant->GetMerchantInventory())
-    {
-        // TradeComponent içindeki C++ mantığı: RemoveItem, TryAddItem ve XP işlemlerini sunucuda yapar.
-        TradeComp->Server_ExecuteTrade(PlayerOfferItems, MerchantOfferItems, InventoryComponent, ActiveMerchant->GetMerchantInventory());
-        
-        UE_LOG(LogTemp, Display, TEXT("[Takas] C++ üzerinden takas emri sunucuya gönderildi."));
-    }
+  // 3. Sunucu Tarafında Asıl Eşya Yer Değiştirme ve XP İşlemini Gerçekleştir
+  // (RPC)
+  UTradeComponent *TradeComp = FindComponentByClass<UTradeComponent>();
+  if (TradeComp && ActiveMerchant->GetMerchantInventory()) {
+    // TradeComponent içindeki C++ mantığı: RemoveItem, TryAddItem ve XP
+    // işlemlerini sunucuda yapar.
+    TradeComp->Server_ExecuteTrade(PlayerOfferItems, MerchantOfferItems,
+                                   InventoryComponent,
+                                   ActiveMerchant->GetMerchantInventory());
 
-    // 4. İşlem bittikten sonra dükkanı kapat (Input modunu ve farenin durumunu sıfırlar)
-    CloseTradeScreen();
+    UE_LOG(LogTemp, Display,
+           TEXT("[Takas] C++ üzerinden takas emri sunucuya gönderildi."));
+  }
+
+  // 4. İşlem bittikten sonra dükkanı kapat (Input modunu ve farenin durumunu
+  // sıfırlar)
+  CloseTradeScreen();
 }
 
-void AGercekCharacter::CloseTradeScreen()
-{
-    if (IsValid(ActiveTradeWidget))
-    {
-        ActiveTradeWidget->RemoveFromParent();
-        ActiveTradeWidget = nullptr;
-    }
+void AGercekCharacter::CloseTradeScreen() {
+  if (IsValid(ActiveTradeWidget)) {
+    ActiveTradeWidget->RemoveFromParent();
+    ActiveTradeWidget = nullptr;
+  }
 
-    // Kamerayı ve hareket yeteneklerini oyuncuya geri ver
-    if (APlayerController* PC = Cast<APlayerController>(GetController()))
-    {
-        PC->bShowMouseCursor = false;
-        
-        FInputModeGameOnly GameMode;
-        PC->SetInputMode(GameMode);
-    }
+  // Kamerayı ve hareket yeteneklerini oyuncuya geri ver
+  if (APlayerController *PC = Cast<APlayerController>(GetController())) {
+    PC->bShowMouseCursor = false;
+
+    FInputModeGameOnly GameMode;
+    PC->SetInputMode(GameMode);
+  }
 }
-
