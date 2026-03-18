@@ -100,6 +100,21 @@ public:
             Category = "PostApoc Inventory | Grid")
   int32 GridRows = 10;
 
+  // Hücre boyutu (Piksel). Varsayılan 50x50.
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "PostApoc Inventory | Grid")
+  float TileSize = 50.0f;
+
+  // Izgarada yaratılacak olan eşya widget sınıfı (WBP_GridItem vb.)
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "PostApoc Inventory | Grid")
+  TSubclassOf<class UUserWidget> GridItemWidgetClass;
+
+  // Tüm eşya verilerinin çekileceği ana tablo
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "PostApoc Inventory | Grid")
+  class UDataTable* ItemDataTable;
+
   /**
    * OccupiedSlots
    *
@@ -208,9 +223,27 @@ public:
    * @param PlayerOfferItems  - Oyuncunun vereceği eşyaların DataTable satır referansları.
    * @param TraderOfferItems  - Oyuncunun alacağı eşyaların DataTable satır referansları.
    */
-  UFUNCTION(BlueprintCallable, Category = "Ticaret")
-  void ExecuteTrade(TArray<FDataTableRowHandle> PlayerOfferItems,
-                    TArray<FDataTableRowHandle> TraderOfferItems);
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  float GetInventoryValue() const;
+
+  /**
+   * NativeRefreshUI
+   *
+   * Verilen GridWidget içindeki "GridCanvas" (CanvasPanel) bileşenini bulur,
+   * içini temizler ve OccupiedSlots içindeki eşyaları C++ üzerinden yaratıp dizer.
+   * Meryem'in Blueprint döngülerine olan ihtiyacı tamamen ortadan kaldırır.
+   */
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
+  void NativeRefreshUI(UUserWidget* GridWidget);
+
+  /**
+   * HandleItemDrop
+   *
+   * Sürükle-bırak işlemi bittiğinde eşyayı yeni koordinatlarına yerleştirmeyi dener.
+   */
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
+  bool HandleItemDrop(FName ItemRowName, FIntPoint NewLocation);
 
   // --- Grid Erişim Yardımcıları ---
 

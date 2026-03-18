@@ -22,7 +22,10 @@
 #include "TimerManager.h"
 #include "TradeComponent.h"
 #include "WorldItemActor.h"
-
+#include "MerchantBase.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/TextBlock.h"
+#include "Components/Button.h"
 
 // Sets default values
 AGercekCharacter::AGercekCharacter() {
@@ -42,24 +45,15 @@ AGercekCharacter::AGercekCharacter() {
   BreathingAudioComponent->SetupAttachment(RootComponent);
   BreathingAudioComponent->bAutoActivate = false; // Başlangıçta çalmasın
 
-  // Normal varsayılanlar...
-  CurrentInteractItemName = TEXT("");
-  CurrentInteractable = nullptr;
-
   // Grid (Tetris) Tabanlı Envanter Bileşeni Başlatma
   InventoryComponent = CreateDefaultSubobject<UPostApocInventoryComponent>(
       TEXT("InventoryComponent"));
   if (InventoryComponent) {
     InventoryComponent->GridColumns = 10;
-    InventoryComponent->GridRows = 5;
+    InventoryComponent->GridRows = 10; // Daha geniş ızgara
+    InventoryComponent->TileSize = 50.0f;
   }
 
-  // Widget Referansı
-  static ConstructorHelpers::FClassFinder<UUserWidget>
-      InteractWidgetClassFinder(TEXT("/Game/Gercek/UI/WBP_Interact"));
-  if (InteractWidgetClassFinder.Succeeded()) {
-    InteractWidgetClass = InteractWidgetClassFinder.Class;
-  }
   DefaultFOV = 90.0f;
   SprintFOV = 110.0f;
   CrouchFOV = 80.0f;
@@ -220,22 +214,11 @@ void AGercekCharacter::BeginPlay() {
     }
   }
 
-  // Etkileşim Widget'ını Başlat (Görünmez Olarak)
-  if (InteractWidgetClass) {
-    InteractWidget = CreateWidget<UUserWidget>(GetWorld(), InteractWidgetClass);
-    if (InteractWidget) {
-      InteractWidget->AddToViewport(999);
-      InteractWidget->SetVisibility(ESlateVisibility::Hidden);
-    }
-  }
 }
 
 // Called every frame
 void AGercekCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
-
-  // Bakışla Algılama Sistemi (Her Karede Işın Yollayarak HUD Kontrolü)
-  CheckForInteractables();
 
   // Her zaman ekranda çalışıp çalışmadığını gösteren mesaj
   if (GEngine) {
@@ -564,6 +547,9 @@ void AGercekCharacter::SetupPlayerInputComponent(
   // Eski tip (Legacy) Input Binding desteği: Envanter açma kapama için
   PlayerInputComponent->BindAction("EnvanterAc", IE_Pressed, this,
                                    &AGercekCharacter::ToggleInventory);
+
+  // Etkileşim (Interact) eylemini bağla (Project Settings -> Input -> Action Mappings)
+  PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AGercekCharacter::Interact);
 }
 
 void AGercekCharacter::StartSprint() {
@@ -607,73 +593,79 @@ void AGercekCharacter::Jump() {
   }
 }
 
+// --- YENİ UZMAN (AAA) ETKİLEŞİM SİSTEMİ ---
+AActor* AGercekCharacter::PerformInteractionTrace() const
+{
+    if (!FpsCameraComponent) return nullptr;
+
+    FVector StartPos = FpsCameraComponent->GetComponentLocation();
+    FVector EndPos = StartPos + (FpsCameraComponent->GetForwardVector() * 200.0f);
+
+    FHitResult HitResult;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+
+    if (GetWorld()->LineTraceSingleByChannel(HitResult, StartPos, EndPos, ECC_Visibility, Params))
+    {
+        return HitResult.GetActor();
+    }
+    return nullptr;
+}
+
+FText AGercekCharacter::GetInteractionPrompt() const
+{
+    AActor* HitActor = PerformInteractionTrace();
+    if (!HitActor)
+        return FText::GetEmpty();
+
+    // Tüccar Kontrolü
+    if (AMerchantBase* Merchant = Cast<AMerchantBase>(HitActor))
+    {
+        FString FoundName = Merchant->GetMerchantName().ToString();
+        return FText::FromString(FString::Printf(TEXT("E - Takas %s"), *FoundName));
+    }
+
+    // Klasik Etkileşim Öğeleri Kontrolü
+    if (HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
+    {
+        FText ItemName = IInteractable::Execute_GetInteractableName(HitActor);
+        if (!ItemName.IsEmpty())
+        {
+            return FText::FromString(FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+        }
+        return FText::FromString(TEXT("E - Al"));
+    }
+
+    return FText::GetEmpty();
+}
+
 void AGercekCharacter::Interact() {
-  // Guard: Nothing to interact with.
-  if (!CurrentInteractable) {
-    return;
-  }
-
-  // Guard: IsValid covers the case where the actor was just destroyed
-  // (e.g. by a competing interaction or another system).
-  if (!IsValid(CurrentInteractable)) {
-    CurrentInteractable = nullptr;
-    CurrentInteractItemName = TEXT("");
-    return;
-  }
-
-  // Only proceed if the actor truly implements the interface.
-  if (!CurrentInteractable->GetClass()->ImplementsInterface(
-          UInteractable::StaticClass())) {
-    return;
-  }
-
-  // Yeni Mantık: Etkileşime geçilen nesnenin verisini alıp bizzat çantaya ekle
-  FDataTableRowHandle ItemData =
-      IInteractable::Execute_GetItemData(CurrentInteractable);
-
-  if (!ItemData.IsNull() && InventoryComponent) {
-    // 1. Envantere eklemeyi dene
-    if (InventoryComponent->TryAddItem(ItemData)) {
-      // 2. Başarılıysa dünyadaki objeyi sil
-      CurrentInteractable->Destroy();
-    } else {
-      // 3. Başarısızsa oyuncuyu uyar
-      if (GEngine) {
-        GEngine->AddOnScreenDebugMessage(
-            -1, 3.0f, FColor::Red,
-            TEXT("[Envanter] Esya icin yeterli yer yok."));
-      }
+    // 1. Durum Kontrolü: Ticaret ekranı zaten açıksa kapat ve işlemden çık
+    if (ActiveTradeWidget != nullptr) {
+        CloseTradeScreen();
+        return;
     }
-  } else {
-    // Eşya verisi yoksa veya envanter bileşeni yoksa klasik etkileşim (Örn:
-    // kapı açma)
-    IInteractable::Execute_OnInteract(CurrentInteractable, this);
-  }
 
-  // After the interact, the actor may or may not have been destroyed.
-  // We clear our reference regardless.
-  CurrentInteractable = nullptr;
-  CurrentInteractItemName = TEXT("");
+    if (!FpsCameraComponent) return;
 
-  // Tüm listener'ları (WBP_Interact dahil) boş text ile haberdar et.
-  // Sadece widget'ı gizlemek yetmez; delegate aracılığıyla text de
-  // sıfırlanmalı, aksi hâlde listener'daki text label eski değeri göstermeye
-  // devam edebilir.
-  OnInteractTargetChanged.Broadcast(FText::GetEmpty());
+    // 2. Mesafe Belirleme: Kameranın merkezinden tam olarak 200 birim ileriye ışın at
+    FVector Start = FpsCameraComponent->GetComponentLocation();
+    FVector End = Start + (FpsCameraComponent->GetForwardVector() * 200.0f);
 
-  // Hide the interaction prompt widget.
-  if (InteractWidget) {
-    InteractWidget->SetVisibility(ESlateVisibility::Hidden);
-  }
+    FHitResult Hit;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this); // Işının oyuncunun kendisine çarpmasını engelle
 
-  // If the inventory widget is open, trigger a UI refresh using reflection.
-  if (IsValid(InventoryWidget)) {
-    UFunction *RefreshFunc =
-        InventoryWidget->FindFunction(TEXT("RefreshInventory"));
-    if (RefreshFunc) {
-      InventoryWidget->ProcessEvent(RefreshFunc, nullptr);
+    // 3. Işın Gönderme (Raycast): Sadece görünür (Visibility) objelerle çarpışmayı test et
+    if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params)) {
+        
+        // 4. Hedef Kontrolü: Çarpılan aktör bir AMerchantBase (Tüccar) sınıfından ise
+        if (AMerchantBase* HitMerchant = Cast<AMerchantBase>(Hit.GetActor())) {
+            
+            // Başarılı hedef eşleşmesi durumunda tüccarın ekranını C++ tarafında aç
+            OpenTradeScreen(HitMerchant);
+        }
     }
-  }
 }
 
 void AGercekCharacter::ToggleInventory() {
@@ -727,76 +719,6 @@ void AGercekCharacter::ToggleInventory() {
 
     // Debug: mevcut envanter içeriğini logla.
     ShowInventoryDetails();
-  }
-}
-
-void AGercekCharacter::CheckForInteractables() {
-  if (!FpsCameraComponent)
-    return;
-
-  FVector StartPosition = FpsCameraComponent->GetComponentLocation();
-  FVector ForwardVector = FpsCameraComponent->GetForwardVector();
-  FVector EndPosition = StartPosition + (ForwardVector * 500.0f);
-
-  FHitResult HitResult;
-  FCollisionQueryParams CollisionParams;
-  CollisionParams.AddIgnoredActor(this);
-
-  // ECC_Visibility — WorldItemActor'ın BlockAllDynamic profili bu kanalı
-  // block eder; özel kanal (ECC_GameTraceChannel2) değil.
-  GetWorld()->LineTraceSingleByChannel(HitResult, StartPosition, EndPosition,
-                                       ECC_Visibility, CollisionParams);
-
-  if (HitResult.bBlockingHit && IsValid(HitResult.GetActor())) {
-    AActor *HitActor = HitResult.GetActor();
-
-    if (HitActor->GetClass()->ImplementsInterface(
-            UInteractable::StaticClass())) {
-      // Only update when the target actually changes — avoid per-frame
-      // Broadcast spam.
-      if (HitActor != CurrentInteractable) {
-        CurrentInteractable = HitActor;
-
-        // Pull the display name from the interface.
-        FText InteractName =
-            IInteractable::Execute_GetInteractableName(CurrentInteractable);
-
-        if (InteractName.IsEmpty()) {
-          // Eğer özel bir isim dönmediyse sadece "E-Al" yaz
-          CurrentInteractItemName = TEXT("E-Al");
-        } else {
-          // İsim döndüyse "E-Al [İsim]" formatında yaz (Kütüphaneden "Paslı
-          // Çelik Zincir" gelirse "E-Al Paslı Çelik Zincir" olur)
-          CurrentInteractItemName =
-              FString::Printf(TEXT("E-Al %s"), *InteractName.ToString());
-        }
-
-        // Broadcast to all listeners (WBP_Interact, HUD, etc.)
-        // Post-Apocalyptic Note: The world speaks through events, not polling.
-        OnInteractTargetChanged.Broadcast(
-            FText::FromString(CurrentInteractItemName));
-
-        // Show the interact widget.
-        if (InteractWidget) {
-          InteractWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-      }
-      return; // Target acquired — exit early.
-    }
-  }
-
-  // Reached here: nothing interactable in range.
-  // If we HAD a target before, clear it and notify listeners.
-  if (CurrentInteractable != nullptr) {
-    CurrentInteractable = nullptr;
-    CurrentInteractItemName = TEXT("");
-
-    // Broadcast empty FText — listener should hide the prompt text.
-    OnInteractTargetChanged.Broadcast(FText::GetEmpty());
-
-    if (InteractWidget) {
-      InteractWidget->SetVisibility(ESlateVisibility::Hidden);
-    }
   }
 }
 
@@ -918,13 +840,6 @@ void AGercekCharacter::UpdateMovementSpeed(float CurrentWeight,
     // ---- NORMAL: Tam hız yeniden aktif ----
     MovementSpeedMultiplier = 1.0f;
   }
-}
-
-FText AGercekCharacter::GetInteractLabelText() const {
-  if (CurrentInteractItemName.IsEmpty()) {
-    return FText::GetEmpty();
-  }
-  return FText::FromString(CurrentInteractItemName);
 }
 
 // ==== HAREKET VE KAMERA (ENHANCED INPUT) ====
@@ -1071,3 +986,150 @@ AGercekCharacter::SpawnItemInWorld(const FDataTableRowHandle &ItemRowHandle,
 
   return SpawnedItem;
 }
+
+// ==== TİCARET EKRANI YÖNETİMİ ====
+
+void AGercekCharacter::OpenTradeScreen(AMerchantBase* TargetMerchant)
+{
+    // Hedef tüccar geçersizse işlem yapma
+    if (!IsValid(TargetMerchant) || !TradeScreenClass)
+    {
+        return;
+    }
+
+    // Aktif tüccarı kaydet
+    ActiveMerchant = TargetMerchant;
+
+    // Halihazırda açık bir takas ekranı yoksa oluştur
+    if (!IsValid(ActiveTradeWidget))
+    {
+        ActiveTradeWidget = CreateWidget<UUserWidget>(GetWorld(), TradeScreenClass);
+    }
+
+    if (IsValid(ActiveTradeWidget))
+    {
+        // 1. Ekrandaki TextBlock (Tüccar Adı) güncellemesi
+        UTextBlock* MerchantNameText = Cast<UTextBlock>(ActiveTradeWidget->GetWidgetFromName(TEXT("Txt_MerchantName")));
+        if (MerchantNameText)
+        {
+            MerchantNameText->SetText(TargetMerchant->GetMerchantName());
+        }
+
+        // 2. Oyuncu ve Tüccar envanter Izgaralarını (Grid) "Enjekte" et ve C++ üzerinden yenile
+        UUserWidget* TraderGridUI = Cast<UUserWidget>(ActiveTradeWidget->GetWidgetFromName(TEXT("TuccarCanta")));
+        if (TraderGridUI)
+        {
+            UPostApocInventoryComponent* MerchantInv = TargetMerchant->GetMerchantInventory();
+            if (MerchantInv)
+            {
+                // C++ üzerinden Native Refresh (Meryem'in BP loop'larını baypas eder)
+                MerchantInv->NativeRefreshUI(TraderGridUI);
+            }
+        }
+
+        UUserWidget* PlayerGridUI = Cast<UUserWidget>(ActiveTradeWidget->GetWidgetFromName(TEXT("OyuncuCanta")));
+        if (PlayerGridUI)
+        {
+            if (InventoryComponent)
+            {
+                // C++ üzerinden Native Refresh
+                InventoryComponent->NativeRefreshUI(PlayerGridUI);
+            }
+        }
+
+        // 3. Buton Bağlantıları (Btn_Ayril, Btn_TakasYap) - Doğrudan C++ Fonksiyonlarına Bağlama
+        UButton* ExitButton = Cast<UButton>(ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_Ayril")));
+        if (ExitButton)
+        {
+            ExitButton->OnClicked.Clear();
+            ExitButton->OnClicked.AddDynamic(this, &AGercekCharacter::CloseTradeScreen);
+        }
+
+        UButton* TradeButton = Cast<UButton>(ActiveTradeWidget->GetWidgetFromName(TEXT("Btn_TakasYap")));
+        if (TradeButton)
+        {
+            TradeButton->OnClicked.Clear();
+            TradeButton->OnClicked.AddDynamic(this, &AGercekCharacter::ExecuteTrade);
+        }
+
+        // 4. Arayüzü ekrana ekle ve girdi (input) kontrollerini düzenle
+        ActiveTradeWidget->AddToViewport(20);
+
+        if (APlayerController* PC = Cast<APlayerController>(GetController()))
+        {
+            PC->bShowMouseCursor = true;
+            
+            FInputModeUIOnly UIMode;
+            UIMode.SetWidgetToFocus(ActiveTradeWidget->TakeWidget());
+            UIMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
+            PC->SetInputMode(UIMode);
+        }
+    }
+}
+
+void AGercekCharacter::ExecuteTrade()
+{
+    if (!IsValid(ActiveTradeWidget) || !ActiveMerchant) return;
+
+    // 1. Değer Kontrolü (Barter Value Validation) - Verileri UI'dan Reflection ile çekiyoruz
+    float PlayerValue = 0.0f;
+    float TraderValue = 0.0f;
+
+    UFunction* GetPlayerValFunc = ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifToplami"));
+    UFunction* GetMerchantValFunc = ActiveTradeWidget->FindFunction(TEXT("GetTuccarIstekToplami"));
+
+    if (GetPlayerValFunc) ActiveTradeWidget->ProcessEvent(GetPlayerValFunc, &PlayerValue);
+    if (GetMerchantValFunc) ActiveTradeWidget->ProcessEvent(GetMerchantValFunc, &TraderValue);
+
+    // KRİTİK: Oyuncunun teklifi tüccarın isteğini karşılamıyorsa kırmızı uyarı ver ve durdur.
+    if (PlayerValue < TraderValue || PlayerValue <= 0.0f)
+    {
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 4.0f, FColor::Red, TEXT("Yetersiz Takas Değeri! Daha fazla eşya ekle."));
+        }
+        return;
+    }
+
+    // 2. Takas Edilecek Eşya Listelerinin Toplanması (Listeler UI'daki slotlardan gelir)
+    TArray<FDataTableRowHandle> PlayerOfferItems;
+    TArray<FDataTableRowHandle> MerchantOfferItems;
+
+    UFunction* GetPlayerListFunc = ActiveTradeWidget->FindFunction(TEXT("GetOyuncuTeklifListesi"));
+    UFunction* GetMerchantListFunc = ActiveTradeWidget->FindFunction(TEXT("GetTuccarTeklifListesi"));
+
+    if (GetPlayerListFunc) ActiveTradeWidget->ProcessEvent(GetPlayerListFunc, &PlayerOfferItems);
+    if (GetMerchantListFunc) ActiveTradeWidget->ProcessEvent(GetMerchantListFunc, &MerchantOfferItems);
+
+    // 3. Sunucu Tarafında Asıl Eşya Yer Değiştirme ve XP İşlemini Gerçekleştir (RPC)
+    UTradeComponent* TradeComp = FindComponentByClass<UTradeComponent>();
+    if (TradeComp && ActiveMerchant->GetMerchantInventory())
+    {
+        // TradeComponent içindeki C++ mantığı: RemoveItem, TryAddItem ve XP işlemlerini sunucuda yapar.
+        TradeComp->Server_ExecuteTrade(PlayerOfferItems, MerchantOfferItems, InventoryComponent, ActiveMerchant->GetMerchantInventory());
+        
+        UE_LOG(LogTemp, Display, TEXT("[Takas] C++ üzerinden takas emri sunucuya gönderildi."));
+    }
+
+    // 4. İşlem bittikten sonra dükkanı kapat (Input modunu ve farenin durumunu sıfırlar)
+    CloseTradeScreen();
+}
+
+void AGercekCharacter::CloseTradeScreen()
+{
+    if (IsValid(ActiveTradeWidget))
+    {
+        ActiveTradeWidget->RemoveFromParent();
+        ActiveTradeWidget = nullptr;
+    }
+
+    // Kamerayı ve hareket yeteneklerini oyuncuya geri ver
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        PC->bShowMouseCursor = false;
+        
+        FInputModeGameOnly GameMode;
+        PC->SetInputMode(GameMode);
+    }
+}
+

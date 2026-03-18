@@ -2,6 +2,11 @@
 
 #include "PostApocInventoryTypes.h"
 #include "Engine/DataTable.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "PostApocGridItem.h"
+#include "GercekCharacter.h"
 
 // ============================================================
 //  UPostApocInventoryComponent — Implementasyon
@@ -246,40 +251,137 @@ int32 UPostApocInventoryComponent::GetItemCountInGrid(FName ItemRowName) const
     return Count;
 }
 
-// ------------------------------------------------------------
-//  ExecuteTrade — Takas İşlemini Gerçekleştiren C++ Fonksiyonu
-//  Blueprint'ten çağrılır.
-// ------------------------------------------------------------
-void UPostApocInventoryComponent::ExecuteTrade(
-    TArray<FDataTableRowHandle> PlayerOfferItems,
-    TArray<FDataTableRowHandle> TraderOfferItems)
+float UPostApocInventoryComponent::GetInventoryValue() const
 {
-    // 1. OYUNCUNUN VERDİKLERİNİ SİL (Çantadan çıkar)
-    // Not: İleride RemoveItem fonksiyonu yazıldığında buradaki yorum satırları açılacak.
-    /*
-    for (const FDataTableRowHandle& ItemToRemove : PlayerOfferItems)
-    {
-        // RemoveItem(ItemToRemove);
-    }
-    */
+    float TotalValue = 0.0f;
+    TSet<FName> CountedItems;
 
-    // 2. TÜCCARDAN ALINANLARI ÇANTAYA YERLEŞTİR
-    for (const FDataTableRowHandle& ItemToAdd : TraderOfferItems)
+    for (const TPair<FIntPoint, FName>& Pair : OccupiedSlots)
     {
-        // TryAddItem, eşyayı Tetris çantasına yerleştirmeye çalışır
-        bool bSuccess = TryAddItem(ItemToAdd);
-
-        if (bSuccess)
+        if (!CountedItems.Contains(Pair.Value))
         {
-            UE_LOG(LogTemp, Display, TEXT("[Takas] Esya basariyla Tetris cantaya eklendi."));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("[Takas] Cantada yer yok! Esya sigmadi."));
-            // İleride buraya sığmayan eşyayı yere atma (SpawnActor) kodu eklenecek.
+            if (ItemDataTable)
+            {
+                const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(Pair.Value, TEXT("GetInventoryValue"));
+                if (ItemData)
+                {
+                    TotalValue += ItemData->BaseValue;
+                }
+            }
+            CountedItems.Add(Pair.Value);
         }
     }
+    return TotalValue;
+}
 
-    // 3. UI'I GÜNCELLE
-    // Takas bittikten sonra Blueprint tarafında arayüzü yenilemek için ileride buraya bir Delegate eklenecek.
+void UPostApocInventoryComponent::NativeRefreshUI(UUserWidget* GridWidget)
+{
+    // Güvenlik Kontrolleri
+    if (!IsValid(GridWidget) || !GridItemWidgetClass || !ItemDataTable)
+    {
+        return;
+    }
+
+    // Canvas Panel'i bul ( Designer tarafında IsVariable=True ve adı "GridCanvas" olmalı)
+    UCanvasPanel* GridCanvas = Cast<UCanvasPanel>(GridWidget->GetWidgetFromName(TEXT("GridCanvas")));
+    if (!GridCanvas)
+    {
+        return;
+    }
+
+    // Eski widget'ları temizle
+    GridCanvas->ClearChildren();
+
+    // İşlenmiş hücreleri takip et (Eşya boyutuna göre atlamak için)
+    TSet<FIntPoint> ProcessedCells;
+
+    for (int32 Y = 0; Y < GridRows; ++Y)
+    {
+        for (int32 X = 0; X < GridColumns; ++X)
+        {
+            FIntPoint CurrentSlot(X, Y);
+
+            // Eğer bu hücre daha önce bir eşyanın parçası olarak işlendiyse atla
+            if (ProcessedCells.Contains(CurrentSlot))
+            {
+                continue;
+            }
+
+            // Hücrede bir eşya var mı?
+            if (OccupiedSlots.Contains(CurrentSlot))
+            {
+                FName RowName = OccupiedSlots[CurrentSlot];
+
+                // Data Table'dan eşya verisini çek (Boyut bilgisi için)
+                const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(RowName, TEXT("NativeRefreshGrid"));
+                if (!ItemData) continue;
+
+                // Grid Item Widget'ını yarat
+                UPostApocGridItem* NewItemWidget = CreateWidget<UPostApocGridItem>(GridWidget, GridItemWidgetClass);
+                if (NewItemWidget)
+                {
+                    // Veriyi enjekte et
+                    NewItemWidget->ItemVerisi.DataTable = ItemDataTable;
+                    NewItemWidget->ItemVerisi.RowName = RowName;
+
+                    // Canvas üzerine yerleştir
+                    UCanvasPanelSlot* CanvasSlot = GridCanvas->AddChildToCanvas(NewItemWidget);
+                    if (CanvasSlot)
+                    {
+                        CanvasSlot->SetAutoSize(true);
+                        // Piksel koordinatına çevir (X * 50, Y * 50)
+                        CanvasSlot->SetPosition(FVector2D(X * TileSize, Y * TileSize));
+                    }
+
+                    // Eşyanın kapladığı tüm hücreleri "Processed" olarak işaretle
+                    for (int32 i = 0; i < ItemData->ItemSize.X; ++i)
+                    {
+                        for (int32 j = 0; j < ItemData->ItemSize.Y; ++j)
+                        {
+                            ProcessedCells.Add(FIntPoint(X + i, Y + j));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+bool UPostApocInventoryComponent::HandleItemDrop(FName ItemRowName, FIntPoint NewLocation)
+{
+    // Eşyayı mevcut yerinden kaldır
+    if (!RemoveItemFromGrid(ItemRowName))
+    {
+        return false;
+    }
+
+    // Yeni yere eklemeyi dene
+    FDataTableRowHandle ItemHandle;
+    ItemHandle.DataTable = ItemDataTable;
+    ItemHandle.RowName = ItemRowName;
+
+    // Not: TryAddItem içinde FindEmptySpace kullanılır, bu yüzden NewLocation'ı doğrudan kullanan
+    // daha spesifik bir AddItem fonksiyonuna ihtiyaç olabilir. 
+    // Ancak şimdilik TryAddItem ile en yakın boşluğa yerleştirme mantığını koruyoruz.
+    // (Gelişmiş koordinatlı drop mantığı için CheckSpace + Manual Add kullanılabilir)
+    
+    if (CheckSpace(NewLocation, FIntPoint(1,1), false)) // Basit check, TryAddItem zaten detaylı bakar
+    {
+        // Gerçek koordinatlı ekleme mantığı:
+        const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(ItemRowName, TEXT("HandleItemDrop"));
+        if (ItemData && CheckSpace(NewLocation, ItemData->ItemSize, false))
+        {
+             for (int32 Row = 0; Row < ItemData->ItemSize.Y; ++Row)
+             {
+                 for (int32 Col = 0; Col < ItemData->ItemSize.X; ++Col)
+                 {
+                     OccupiedSlots.Add(FIntPoint(NewLocation.X + Col, NewLocation.Y + Row), ItemRowName);
+                 }
+             }
+             return true;
+        }
+    }
+    
+    // Başarısız olursa eski yerine geri dönmeyi veya en uygun yere atmayı deneyebiliriz
+    return TryAddItem(ItemHandle);
 }
