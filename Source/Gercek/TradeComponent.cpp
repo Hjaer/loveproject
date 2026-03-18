@@ -1,159 +1,91 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "TradeComponent.h"
-#include "Net/UnrealNetwork.h"
-#include "WorldItemActor.h"
+#include "Engine/World.h"
 #include "GercekCharacter.h"
+#include "PostApocInventoryTypes.h"
+#include "PostApocItemTypes.h"
+#include "WorldItemActor.h"
 
 UTradeComponent::UTradeComponent() {
+  // Takas mantığı sadece ihtiyaç duyulduğunda çalışacağı için Tick kapalı
   PrimaryComponentTick.bCanEverTick = false;
-  SetIsReplicatedByDefault(true);
-  CurrentMoney = 0.0f; // Başlangıç parası
 }
 
-void UTradeComponent::GetLifetimeReplicatedProps(
-    TArray<FLifetimeProperty> &OutLifetimeProps) const {
-  Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-  DOREPLIFETIME(UTradeComponent, CurrentMoney);
+bool UTradeComponent::Server_ExecuteTrade_Validate(
+    const TArray<FDataTableRowHandle> &PlayerOffer,
+    const TArray<FDataTableRowHandle> &TraderOffer,
+    UPostApocInventoryComponent *PlayerInv,
+    UPostApocInventoryComponent *TraderInv) {
+  // Null işaretçi koruması (Zero-Pointer Policy Guard)
+  // Envanter bileşenleri geçerli değilse RPC devreye girmez.
+  return (PlayerInv != nullptr && TraderInv != nullptr);
 }
 
-void UTradeComponent::Server_AdjustMoney_Implementation(float Amount) {
-  CurrentMoney += Amount;
-  CurrentMoney = FMath::Max(0.0f, CurrentMoney);
-  UE_LOG(LogTemp, Log, TEXT("[TRADE] Para değişti: %f | Yeni Toplam: %f"),
-         Amount, CurrentMoney);
-}
-
-bool UTradeComponent::Server_AdjustMoney_Validate(float Amount) { return true; }
-
-// ============================================================
-//  YENI TICARET SISTEMI — Server_ExecuteTrade
-//  1. Oyuncunun teklif ettigi eşyaları (PlayerOfferItems) envanterden siler.
-//  2. Tüccarın teklif ettigi eşyaları (TraderOfferItems) ekler.
-//  3. Eğer çanta doluysa (TryAddItem = false), eşyayı yere spawn eder.
-// ============================================================
 void UTradeComponent::Server_ExecuteTrade_Implementation(
-    const TArray<FDataTableRowHandle>& PlayerOfferItems,
-    const TArray<FDataTableRowHandle>& TraderOfferItems,
-    UPostApocInventoryComponent* PlayerInventory) {
-
-  if (!PlayerInventory) {
-    UE_LOG(LogTemp, Warning, TEXT("[TRADE] Server_ExecuteTrade: PlayerInventory null."));
+    const TArray<FDataTableRowHandle> &PlayerOffer,
+    const TArray<FDataTableRowHandle> &TraderOffer,
+    UPostApocInventoryComponent *PlayerInv,
+    UPostApocInventoryComponent *TraderInv) {
+  // Yalnızca sunucu yetkisine (Authority) sahipsek işlemleri yap
+  if (!GetOwner()->HasAuthority()) {
     return;
   }
 
-  // 1. OYUNCUNUN VERDIKLERINI SIL (Çantadan çıkar)
-  for (const FDataTableRowHandle& OfferItem : PlayerOfferItems) {
-    if (OfferItem.IsNull()) continue;
-    
-    // Görev/Quest kontrolü: Oyuncu görev eşyasını teklif edemez.
-    const FItemDBRow* RowCheck = OfferItem.GetRow<FItemDBRow>(TEXT("TradeComponent::QuestCheck"));
-    if (RowCheck && (RowCheck->ItemType == EItemType::QuestItem || RowCheck->ItemType == EItemType::Quest || RowCheck->ItemCategory == EItemCategory::Quest)) {
-      UE_LOG(LogTemp, Warning, TEXT("[TRADE] '%s' gorev esyasi oldugu icin satilamaz/verilemez."), *OfferItem.RowName.ToString());
-      continue;
-    }
-
-    // Grid sisteminden esyayi kaldir
-    bool bRemoved = PlayerInventory->RemoveItemFromGrid(OfferItem.RowName);
-    if (bRemoved) {
-      UE_LOG(LogTemp, Log, TEXT("[TRADE] Teklif edilen '%s' envanterden silindi."), *OfferItem.RowName.ToString());
-    } else {
-      UE_LOG(LogTemp, Warning, TEXT("[TRADE] Teklif edilen '%s' envanterde bulunamadi!"), *OfferItem.RowName.ToString());
-    }
-  }
-
-  // Sahibi olan Karakteri bul (Yere eşya atma hesabi ve XP icin)
-  AGercekCharacter* OwnerCharacter = Cast<AGercekCharacter>(GetOwner());
-  FVector SpawnLocation = FVector::ZeroVector;
-  if (OwnerCharacter) {
-    SpawnLocation = OwnerCharacter->GetActorLocation() + (OwnerCharacter->GetActorForwardVector() * 100.0f);
-  } else {
-    // Controller vs ise GetOwner()->GetActorLocation()
-    SpawnLocation = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
-  }
-
   float TotalTradeValue = 0.0f;
+  AGercekCharacter *PlayerCharacter =
+      Cast<AGercekCharacter>(PlayerInv->GetOwner());
 
-  // 2. TÜCCARDAN ALINANLARI ÇANTAYA YERLEŞTİR VEYA YERE AT
-  for (const FDataTableRowHandle& RequestItem : TraderOfferItems) {
-    if (RequestItem.IsNull()) continue;
+  // 1. Oyuncunun teklif ettiği eşyaları (PlayerOffer) envanterden sil ve
+  // tüccara aktar.
+  for (const FDataTableRowHandle &OfferItem : PlayerOffer) {
+    if (!OfferItem.IsNull()) {
+      // Oyuncunun ızgara envanterinden eşyayı (satır adını baz alarak) kaldır
+      bool bRemoved = PlayerInv->RemoveItemFromGrid(OfferItem.RowName);
 
-    const FItemDBRow* ItemRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::RequestCheck"));
-    if (ItemRowCheck) {
-      TotalTradeValue += ItemRowCheck->ItemValue; // XP olarak eklenecek değer
+      if (bRemoved) {
+        // Başarılı şekilde çıkarıldıysa tüccarın envanterine eklemeyi dene
+        TraderInv->TryAddItem(OfferItem);
+      }
     }
+  }
 
-    // TryAddItem, eşyayı Tetris çantasına yerleştirmeye çalışır
-    bool bSuccess = PlayerInventory->TryAddItem(RequestItem);
-    
-    if (bSuccess) {
-      UE_LOG(LogTemp, Display, TEXT("[TRADE] Alinan '%s' basariyla Tetris cantaya eklendi."), *RequestItem.RowName.ToString());
-      
-      // Çanta yükseltmesi (Backpack) kontrolü
-      const FItemDBRow* BackpackRowCheck = RequestItem.GetRow<FItemDBRow>(TEXT("TradeComponent::BackpackCheck"));
-      if (BackpackRowCheck && BackpackRowCheck->ItemType == EItemType::Backpack) {
-        HandleBackpackUpgrade(RequestItem, PlayerInventory);
+  // 2. Tüccarın teklif ettiği eşyaları (TraderOffer) tüccardan çıkar, değere
+  // ekle ve oyuncuya ver.
+  for (const FDataTableRowHandle &TraderItemHandle : TraderOffer) {
+    if (!TraderItemHandle.IsNull()) {
+      // FPostApocItemRow DataTable yapısından baz değeri (BaseValue) alıyoruz
+      FPostApocItemRow *ItemRow = TraderItemHandle.GetRow<FPostApocItemRow>(
+          TEXT("TradeExecuteContext"));
+      if (ItemRow) {
+        TotalTradeValue += ItemRow->BaseValue;
       }
 
-    } else {
-      UE_LOG(LogTemp, Error, TEXT("[TRADE] Cantada yer yok! '%s' yere atiliyor (Drop)."), *RequestItem.RowName.ToString());
-      
-      // Yere Atma Islemi (Spawn AWorldItemActor)
-      if (GetWorld()) {
-        FActorSpawnParameters SpawnParams;
-        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+      // Tüccarın ızgarasından eşyayı kaldır
+      bool bTraderRemoved =
+          TraderInv->RemoveItemFromGrid(TraderItemHandle.RowName);
 
-        AWorldItemActor* SpawnedItem = GetWorld()->SpawnActor<AWorldItemActor>(
-            AWorldItemActor::StaticClass(), 
-            SpawnLocation, 
-            FRotator::ZeroRotator, 
-            SpawnParams
-        );
+      if (bTraderRemoved) {
+        // Tüccardan başarıyla silindiyse oyuncunun envanterine eklemeyi dene
+        bool bAddedToPlayer = PlayerInv->TryAddItem(TraderItemHandle);
 
-        if (SpawnedItem) {
-          SpawnedItem->InitializeItemData(RequestItem);
+        // Eğer oyuncu envanterinde yer yoksa TryAddItem false döner.
+        // Kritik: Bu durumda eşyayı sızdırmayıp (overflow) oyuncunun önüne
+        // spawn ediyoruz.
+        if (!bAddedToPlayer && PlayerCharacter) {
+          FVector SpawnLocation =
+              PlayerCharacter->GetActorLocation() +
+              (PlayerCharacter->GetActorForwardVector() * 100.0f);
+
+          // Halihazırda var olan spawn metodunu kullanarak dünyada objeyi
+          // (WorldItemActor) oluştur
+          PlayerCharacter->SpawnItemInWorld(TraderItemHandle, SpawnLocation);
         }
       }
     }
   }
 
-  // İşlem bitince XP'yi ekle
-  if (OwnerCharacter && TotalTradeValue > 0.0f) {
-    OwnerCharacter->AddTradeXP(TotalTradeValue);
-    UE_LOG(LogTemp, Log, TEXT("[TRADE] Takas tamamlandi. Oyuncu %.1f Ticaret XP'si (TradeXP) kazandi."), TotalTradeValue);
-  }
-}
-
-bool UTradeComponent::Server_ExecuteTrade_Validate(
-    const TArray<FDataTableRowHandle>& PlayerOfferItems,
-    const TArray<FDataTableRowHandle>& TraderOfferItems,
-    UPostApocInventoryComponent* PlayerInventory) {
-  return true;
-}
-
-// ============================================================
-//  ÇANTA YÜKSELTME — HandleBackpackUpgrade
-//  Satın alınan çantanın ExtraCapacity değeri kadar ızgara
-//  satır sayısını (GridRows) artırır.
-//  Tarkov mantığı: büyük çanta = daha fazla ızgara alanı.
-// ============================================================
-void UTradeComponent::HandleBackpackUpgrade(
-    FDataTableRowHandle BackpackItem,
-    UPostApocInventoryComponent *PlayerInventory) {
-
-  if (!PlayerInventory || BackpackItem.IsNull())
-    return;
-
-  const FItemDBRow *ItemRow =
-      BackpackItem.GetRow<FItemDBRow>(TEXT("TradeComponent::HandleBackpackUpgrade"));
-
-  if (ItemRow && ItemRow->ExtraCapacity > 0) {
-    // ExtraCapacity'yi ızgara satır sayısına ekle
-    // (Her satır = 1 birim yükseklik = GridColumns adet ekstra slot)
-    PlayerInventory->GridRows += ItemRow->ExtraCapacity;
-
-    UE_LOG(LogTemp, Log,
-           TEXT("[TRADE] Çanta yükseltmesi yapıldı. Yeni ızgara satır sayısı: %d"),
-           PlayerInventory->GridRows);
+  // 3. Hesaplanan toplam takas değerini kullanarak oyuncuya (Trade XP) tecrübe
+  // puanını yansıt
+  if (PlayerCharacter && TotalTradeValue > 0.0f) {
+    PlayerCharacter->AddTradeXP(TotalTradeValue);
   }
 }

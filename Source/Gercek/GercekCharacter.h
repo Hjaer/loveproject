@@ -11,11 +11,7 @@
 #include "GercekCharacter.generated.h"
 // clang-format on
 
-// Etkileşim hedefi değiştiğinde veya kaybolduğunda yıyınlı (broadcast) giden
-// delegate. Widget bu eventi dinleyerek metni güncelleyebilir — polling yerine
-// event-driven yaklaşım.
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInteractTargetChanged, FText,
-                                            NewLabel);
+class AMerchantBase; // İleriye dönük ticaret aktörü tanımlaması
 
 // EItemType ve EItemRarity artik ItemTypes.h'de tanimli.
 // ConsumeItem fonksiyonu EItemType::Food, EItemType::Med vb. kullanir.
@@ -42,16 +38,18 @@ public:
       class UInputComponent *PlayerInputComponent) override;
   virtual void Jump() override;
 
-  // Etkileşim(E tuşu) etiketi değiştiğinde tüm dinleyicilere gönderilir.
-  // WBP_Interact bunu dinleyerek anında güncellenebilir; polling gerekmez.
-  UPROPERTY(BlueprintAssignable, Category = "Survival|UI")
-  FOnInteractTargetChanged OnInteractTargetChanged;
-
   // Etkileşim fonksiyonu
   void Interact();
 
-  // Bakışla Algılama (Looking At) HUD Yönetimi
-  void CheckForInteractables();
+protected:
+  // --- YENİ UZMAN (AAA) ETKİLEŞİM SİSTEMİ ---
+  // Kamera açısından 300.0f uzunluğunda Line Trace gerçekleştirir
+  AActor* PerformInteractionTrace() const;
+
+public:
+  // HUD üzerinden her kare veya periyodik okunarak etkileşim metnini çeker (Zero-Blueprint Policy)
+  UFUNCTION(BlueprintPure, Category = "Interaction")
+  FText GetInteractionPrompt() const;
 
   // Eşya Tüketim Fonksiyonları
   UFUNCTION(BlueprintCallable, Category = "Survival | Items")
@@ -151,24 +149,6 @@ protected:
   UPROPERTY(EditDefaultsOnly, Category = "HUD")
   TSubclassOf<class UUserWidget> PlayerHUDClass;
 
-  // Etkileşim HUD Widget Referansı
-  UPROPERTY(EditDefaultsOnly, Category = "Interaction")
-  TSubclassOf<class UUserWidget> InteractWidgetClass;
-
-  UPROPERTY()
-  class UUserWidget *InteractWidget;
-
-  // Şu anda bakılan etkileşimli nesnenin ekranda gösterilen adı
-  // Widget bunu UPROPERTY yerine GetInteractLabelText() üzerinden okumalı
-  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
-  FString CurrentInteractItemName;
-
-  // Blueprint-safe getter: WBP_Interact bu fonksiyonu çağırarak etiket metnini
-  // alır. UHT inline UFUNCTION'ları Blueprint'e expose etmez — implementasyon
-  // .cpp'de.
-  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
-  FText GetInteractLabelText() const;
-
   // Grid Tabanlı Envanter Bileşeni (Grid Inventory Component)
   // Eski liste-tabanlı UInventoryComponent kaldırıldı; yerine ızgara mantıklı
   // UPostApocInventoryComponent kullanılıyor.
@@ -186,8 +166,6 @@ public:
 
   UFUNCTION(BlueprintCallable, Category = "Trade Knowledge")
   void AddTradeXP(float Amount);
-
-  AActor *CurrentInteractable;
 
   // Editörden IA_Interact ve IMC_Default seçebilmek için
   UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
@@ -213,6 +191,32 @@ public:
   // Envanter içerisindeki tüm eşyaları ekrana ve log'a yazdırır
   UFUNCTION(BlueprintCallable, Category = "Inventory")
   void ShowInventoryDetails();
+
+  // ==== TİCARET EKRANI (TRADE UI) YÖNETİMİ ====
+  
+  // Blueprint'te seçilecek olan ticaret ekranı arayüzü sınıfı (WBP_TradeScreen_YENI vb.)
+  UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trade UI")
+  TSubclassOf<class UUserWidget> TradeScreenClass;
+
+  // Şu anda ekranda aktif olan ticaret arayüzü referansı
+  UPROPERTY()
+  class UUserWidget* ActiveTradeWidget;
+
+  // Ticaret arayüzünü hedef tüccar verileriyle başlatır
+  UFUNCTION(BlueprintCallable, Category = "Trade UI")
+  void OpenTradeScreen(class AMerchantBase* TargetMerchant);
+
+  // Ticaret arayüzünü güvenli şekilde kapatır ve oyun içi girdi moduna döner
+  UFUNCTION(BlueprintCallable, Category = "Trade UI")
+  void CloseTradeScreen();
+
+  // Ticaret işlemini onaylar, değer kontrolünü yapar ve sunucu işlemini başlatır
+  UFUNCTION()
+  void ExecuteTrade();
+
+  // Şu an etkileşimde olunan tüccar
+  UPROPERTY()
+  class AMerchantBase* ActiveMerchant;
 
   // ==== ÇANTADAN ETKİLEŞİM YETENEKLERİ (USE & DROP) ====
 
