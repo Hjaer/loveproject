@@ -35,7 +35,8 @@ enum class EItemType : uint8 {
   QuestItem UMETA(DisplayName = "Quest"),
   Gear UMETA(DisplayName = "Gear (Ekipman)"),
   Valuable UMETA(DisplayName = "Valuable (Degerli)"),
-  Tool UMETA(DisplayName = "Tool (Alet)")
+  Tool UMETA(DisplayName = "Tool (Alet)"),
+  AntiRad UMETA(DisplayName = "Anti-Radiation (Radyasyon Ilaci)")
 };
 
 /**

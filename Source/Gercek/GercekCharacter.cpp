@@ -779,10 +779,21 @@ void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {
     break;
 
   case EItemType::Junk:
-    // Hurda: Radyasyonu azalt?r (AntiRad yerine junk kategorisinde
-    // tutulabilir, ya da ilerleyen versiyonda ayr? bir AntiRad eklenebilir).
+    // Hurda: Artık radyasyonu azaltmaz, sadece ticari veya üretim amaçlı bir eşya (Trade/Barter).
+    break;
+
+  case EItemType::AntiRad:
+    // AntiRad (Radyasyon İlacı): Radyasyonu temizler.
     Radiation -= Amount;
     Radiation = FMath::Clamp(Radiation, 0.0f, MaxRadiation);
+
+    // Hardcore Penalty: Ağır kimyasallar vücudu yorar, anında 15 Stamina siler.
+    Stamina -= 15.0f;
+    Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
+
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, TEXT("Radyasyon temizlendi, ancak yorgunluk hissediyorsun!"));
+    }
     break;
 
   default:
@@ -922,7 +933,7 @@ void AGercekCharacter::UseItemFromInventory(
   if (!Row)
     return;
 
-  if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med) {
+  if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med || Row->ItemType == EItemType::AntiRad) {
     // Grid'den 1 adet kaldır (tüm hücreleri serbest bırakır)
     if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
       // Amount olarak ItemValue kullan (iyileştirme miktarı)
