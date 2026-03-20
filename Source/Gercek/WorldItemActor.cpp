@@ -8,6 +8,8 @@
 // Sets default values
 AWorldItemActor::AWorldItemActor() {
   PrimaryActorTick.bCanEverTick = false;
+  bReplicates = true;
+  SetReplicateMovement(true);
 
   MeshComponent =
       CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));

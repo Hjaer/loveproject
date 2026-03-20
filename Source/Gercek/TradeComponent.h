@@ -7,6 +7,7 @@
 
 // Ileriye dönük tanımlamalar (Forward declarations)
 class UPostApocInventoryComponent;
+class AMerchantBase;
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class GERCEK_API UTradeComponent : public UActorComponent {

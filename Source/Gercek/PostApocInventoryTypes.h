@@ -287,4 +287,7 @@ public:
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Grid")
   TMap<FIntPoint, FName> GetOccupiedSlots() const;
+
+private:
+  void BroadcastGridChanged();
 };

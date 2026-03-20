@@ -22,6 +22,8 @@ static FDataTableRowHandle BuildPostApocHandle(FName RowName) {
 
 AItemBase::AItemBase() {
   PrimaryActorTick.bCanEverTick = false;
+  bReplicates = true;
+  SetReplicateMovement(true);
 
   ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
   RootComponent = ItemMesh;

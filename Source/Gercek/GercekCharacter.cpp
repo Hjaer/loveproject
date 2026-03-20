@@ -60,6 +60,9 @@ AGercekCharacter::AGercekCharacter() {
     InventoryComponent->TileSize = 50.0f;
   }
 
+  TradeComponent =
+      CreateDefaultSubobject<UTradeComponent>(TEXT("TradeComponent"));
+
   DefaultFOV = 90.0f;
   SprintFOV = 110.0f;
   CrouchFOV = 80.0f;
@@ -95,7 +98,8 @@ AGercekCharacter::AGercekCharacter() {
   if (GetCharacterMovement()) {
     GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
     GetCharacterMovement()->MaxWalkSpeed = 300.0f; // Normal yürüme hızı
-    GetCharacterMovement()->bOrientRotationToMovement = false; // FPS için kapalı olmalı
+    GetCharacterMovement()->bOrientRotationToMovement =
+        false; // FPS için kapalı olmalı
 
     // Başlangıç hız limitleri
     BaseWalkSpeed = 300.0f;
@@ -112,7 +116,8 @@ AGercekCharacter::AGercekCharacter() {
   TradeXP = 0.0f;
   CurrentKnowledge = ETradeKnowledge::Novice;
 
-  // Son hasar alma zamanını başlangıçta çok küçük bir değere ayarla (hemen regen başlasın)
+  // Son hasar alma zamanını başlangıçta çok küçük bir değere ayarla (hemen
+  // regen başlasın)
   LastDamageTakenTime = -999.0f;
 }
 
@@ -125,6 +130,7 @@ void AGercekCharacter::GetLifetimeReplicatedProps(
   DOREPLIFETIME(AGercekCharacter, Stamina);
   DOREPLIFETIME(AGercekCharacter, Hunger);
   DOREPLIFETIME(AGercekCharacter, Thirst);
+  DOREPLIFETIME(AGercekCharacter, LastDamageTakenTime);
 
   // Ticaret XP ve Bilgi Seviyesi
   DOREPLIFETIME(AGercekCharacter, TradeXP);
@@ -186,13 +192,10 @@ FText AGercekCharacter::GetKnowledgeAdjustedValue(float BaseValue) const {
 void AGercekCharacter::BeginPlay() {
   Super::BeginPlay();
 
-  // OnWeightChanged: Bu delegate UInventoryComponent'e aitti.
-  // UPostApocInventoryComponent'te henüz karşılığı yok — geçiş dönemi için
-  // yorum satırında bırakıldı. Bildirim sistemi grid widget'a taşınınca geri
-  // açılır. if (InventoryComponent) {
-  //   InventoryComponent->OnWeightChanged.AddDynamic(
-  //       this, &AGercekCharacter::OnInventoryWeightChanged);
-  // }
+  if (InventoryComponent) {
+    InventoryComponent->OnGridUpdated.AddDynamic(
+        this, &AGercekCharacter::HandleGridInventoryUpdated);
+  }
 
   if (!BreathingAudioComponent) {
     BreathingAudioComponent = FindComponentByClass<UAudioComponent>();
@@ -203,24 +206,34 @@ void AGercekCharacter::BeginPlay() {
     BreathingAudioComponent->Stop();
   }
 
-  // Enhanced Input Mapping Context Ekleme
-  if (APlayerController *PlayerController =
-          Cast<APlayerController>(Controller)) {
-    if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
-            ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
-                PlayerController->GetLocalPlayer())) {
-      if (DefaultMappingContext) {
-        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+  if (IsLocallyControlled()) {
+    // Enhanced Input Mapping Context Ekleme
+    if (APlayerController *PlayerController =
+            Cast<APlayerController>(Controller)) {
+      if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
+              ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+                  PlayerController->GetLocalPlayer())) {
+        if (DefaultMappingContext) {
+          Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        }
       }
     }
-  }
 
-  // HUD Oluşturma ve Ekrana Ekleme
-  if (PlayerHUDClass) {
-    UUserWidget *HUDWidget =
-        CreateWidget<UUserWidget>(GetWorld(), PlayerHUDClass);
-    if (HUDWidget) {
-      HUDWidget->AddToViewport();
+    // Sadece yerel oyuncuda etkileşim ve kamera timer'ları çalışsın.
+    GetWorld()->GetTimerManager().SetTimer(
+        InteractionTimerHandle, this,
+        &AGercekCharacter::PerformInteractionTracePeriodic, 0.1f, true);
+    GetWorld()->GetTimerManager().SetTimer(
+        CameraShakeTimerHandle, this, &AGercekCharacter::PlayCameraShakePeriodic,
+        0.35f, true);
+
+    // HUD sadece yerel sahipte oluşturulmalı.
+    if (PlayerHUDClass) {
+      UUserWidget *HUDWidget =
+          CreateWidget<UUserWidget>(GetWorld(), PlayerHUDClass);
+      if (HUDWidget) {
+        HUDWidget->AddToViewport();
+      }
     }
   }
 }
@@ -228,20 +241,26 @@ void AGercekCharacter::BeginPlay() {
 void AGercekCharacter::PawnClientRestart() {
   Super::PawnClientRestart();
 
-  if (APlayerController *PlayerController = Cast<APlayerController>(GetController())) {
-    
-    // Oyun/UI odak sorunlarını engellemek için fare ve girdi modunu zorla GameOnly yap.
+  if (APlayerController *PlayerController =
+          Cast<APlayerController>(GetController())) {
+
+    // Oyun/UI odak sorunlarını engellemek için fare ve girdi modunu zorla
+    // GameOnly yap.
     FInputModeGameOnly GameMode;
     PlayerController->SetInputMode(GameMode);
     PlayerController->bShowMouseCursor = false;
 
-    if (UEnhancedInputLocalPlayerSubsystem *Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer())) {
+    if (UEnhancedInputLocalPlayerSubsystem *Subsystem =
+            ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(
+                PlayerController->GetLocalPlayer())) {
       // Sıkışmış ve eski tuş atamalarını (stuck states) temizle
       Subsystem->ClearAllMappings();
 
       if (DefaultMappingContext) {
         Subsystem->AddMappingContext(DefaultMappingContext, 0);
-        UE_LOG(LogTemp, Display, TEXT("[EnhancedInput] DefaultMappingContext forcibly injected and UI Input cleared via C++."));
+        UE_LOG(LogTemp, Display,
+               TEXT("[EnhancedInput] DefaultMappingContext forcibly injected "
+                    "and UI Input cleared via C++."));
       }
     }
   }
@@ -251,8 +270,8 @@ void AGercekCharacter::PawnClientRestart() {
 void AGercekCharacter::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
-  // Her zaman ekranda çalışıp çalışmadığını gösteren mesaj
-  if (GEngine) {
+  // Debug HUD spam'ini sadece yerel karakterde göster.
+  if (IsLocallyControlled() && GEngine) {
     GEngine->AddOnScreenDebugMessage(
         -1, 0.0f, FColor::Yellow,
         FString::Printf(TEXT("STAMINA: %.1f"), Stamina));
@@ -289,25 +308,21 @@ void AGercekCharacter::Tick(float DeltaTime) {
     // Kural 2: Can 50 veya altındaysa — Otomatik yenilenme YOKTUR.
     //   * Eşya kullanıldığında (ApplyItemEffect::Med) regen gersçekleşir.
     //   * SON 15 SANİYEDE HİÇ HASAR ALINMAZSA yenilenme başlar.
-    const float CurrentTime    = GetWorld()->GetTimeSeconds();
+    const float CurrentTime = GetWorld()->GetTimeSeconds();
     const float TimeSinceDamage = CurrentTime - LastDamageTakenTime;
 
-    const bool bWellFed        = Hunger > 75.0f && Thirst > 75.0f && Radiation <= 20.0f;
+    const bool bWellFed =
+        Hunger > 75.0f && Thirst > 75.0f && Radiation <= 20.0f;
 
-    if (Health > 50.0f)
-    {
+    if (Health > 50.0f) {
       // --- Can 50 Üzeri: Otomatik regen, tokluk ve radyasyon peşi sıra ---
-      if (bWellFed)
-      {
+      if (bWellFed) {
         Health += 0.5f * DeltaTime;
         Health = FMath::Clamp(Health, 0.0f, MaxHealth);
       }
-    }
-    else
-    {
+    } else {
       // --- Can 50 Altı: Sadece 15 saniye hasar almamışsa regen açılır ---
-      if (bWellFed && TimeSinceDamage >= 15.0f)
-      {
+      if (bWellFed && TimeSinceDamage >= 15.0f) {
         Health += 0.5f * DeltaTime;
         Health = FMath::Clamp(Health, 0.0f, MaxHealth);
       }
@@ -320,8 +335,10 @@ void AGercekCharacter::Tick(float DeltaTime) {
     // Stamina yönetimi ve Koşma mantığı
     if (bIsSprinting && GetVelocity().SizeSquared() > 0 && !bIsExhausted) {
       // 15 ile 0 arasında stamina düşüşünü yavaşlat (saniyede 5 birim)
+      // Can 25'in altındaysa yaralı durum: tükenme hızı 20f'e çıkar
+      const float BaseDepletionRate = (Health < 25.0f) ? 20.0f : StaminaDepletionRate;
       float CurrentDepletionRate =
-          (Stamina < 15.0f) ? 5.0f : StaminaDepletionRate;
+          (Stamina < 15.0f) ? 5.0f : BaseDepletionRate;
       Stamina -= DeltaTime * CurrentDepletionRate;
       Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
 
@@ -430,8 +447,10 @@ void AGercekCharacter::Tick(float DeltaTime) {
     }
 
     float CurrentFOV = FpsCameraComponent->FieldOfView;
-    FpsCameraComponent->SetFieldOfView(
-        FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, FOVInterpSpeed));
+    if (!FMath::IsNearlyEqual(CurrentFOV, TargetFOV, 0.1f)) {
+      FpsCameraComponent->SetFieldOfView(
+          FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, FOVInterpSpeed));
+    }
   }
 
   // ==== HASAR GÖRSEL EFEKTLERİ (POST-PROCESS) ====
@@ -450,10 +469,7 @@ void AGercekCharacter::Tick(float DeltaTime) {
       TargetVignette = 0.6f;   // Hafif Vignette
     }
 
-    // Post Process Ayarlarına Müdahale
     FPostProcessSettings &Settings = FpsCameraComponent->PostProcessSettings;
-    Settings.bOverride_ColorSaturation = true;
-    Settings.bOverride_SceneFringeIntensity = true;
 
     // FVector4 için yumuşak geçiş hesaplaması (Interp)
     FVector4 CurrentSaturation = Settings.ColorSaturation;
@@ -462,49 +478,31 @@ void AGercekCharacter::Tick(float DeltaTime) {
       CurrentSaturation = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
-    // Saturation Geçişi: X, Y, Z renk kanallarını hedefe doğru yumuşat (W
-    // kanalı opaklık/alpha)
-    float InterpSat = FMath::FInterpTo(CurrentSaturation.X, TargetSaturation,
-                                       DeltaTime, 1.5f);
-    Settings.ColorSaturation = FVector4(InterpSat, InterpSat, InterpSat, 1.0f);
+    // Optimizasyon: Sadece gerekli olduğunda efekti uygula
+    if (!FMath::IsNearlyEqual(CurrentSaturation.X, TargetSaturation, 0.01f) ||
+        !FMath::IsNearlyEqual(Settings.SceneFringeIntensity, TargetFringe, 0.01f) ||
+        !FMath::IsNearlyEqual(Settings.VignetteIntensity, TargetVignette, 0.01f)) {
 
-    // Fringe (Bulanıklık/Renk Kayması) Geçişi
-    float CurrentFringe = Settings.SceneFringeIntensity;
-    Settings.SceneFringeIntensity =
-        FMath::FInterpTo(CurrentFringe, TargetFringe, DeltaTime, 1.5f);
+      Settings.bOverride_ColorSaturation = true;
+      Settings.bOverride_SceneFringeIntensity = true;
+      Settings.bOverride_VignetteIntensity = true;
 
-    // Vignette Geçişi
-    Settings.bOverride_VignetteIntensity = true;
-    float CurrentVignette = Settings.VignetteIntensity;
-    Settings.VignetteIntensity =
-        FMath::FInterpTo(CurrentVignette, TargetVignette, DeltaTime, 1.5f);
-  }
+      // Saturation Geçişi
+      float InterpSat = FMath::FInterpTo(CurrentSaturation.X, TargetSaturation, DeltaTime, 1.5f);
+      Settings.ColorSaturation = FVector4(InterpSat, InterpSat, InterpSat, 1.0f);
 
-  // ==== DİNAMİK KAMERA SARSINTISI (CAMERA SHAKE) ====
+      // Fringe Geçişi
+      float CurrentFringe = Settings.SceneFringeIntensity;
+      Settings.SceneFringeIntensity = FMath::FInterpTo(CurrentFringe, TargetFringe, DeltaTime, 1.5f);
 
-  if (WalkingCameraShakeClass) {
-    if (APlayerController *PlayerController =
-            Cast<APlayerController>(GetController())) {
-      float Speed = GetVelocity().Size();
-      bool bIsOnGround =
-          GetCharacterMovement() && GetCharacterMovement()->IsMovingOnGround();
-
-      // Sadece yerdeyken ve karakter hareket ediyorsa sarsıntı oynatılır
-      if (bIsOnGround && Speed > 0.0f) {
-
-        // Hıza dayalı sarsıntı şiddeti, sarsıntıyı dinamik kılar
-        // Varsayılan yürüme hızımız 300, Koşma hızımız 600 olduğuna göre:
-        float ShakeScale = Speed / BaseWalkSpeed;
-
-        // İsteğe bağlı ince ayar: Scale'i Clamp'leyerek çok absürt değerleri
-        // önle
-        ShakeScale = FMath::Clamp(ShakeScale, 0.1f, 2.0f);
-
-        PlayerController->ClientStartCameraShake(WalkingCameraShakeClass,
-                                                 ShakeScale);
-      }
+      // Vignette Geçişi
+      float CurrentVignette = Settings.VignetteIntensity;
+      Settings.VignetteIntensity = FMath::FInterpTo(CurrentVignette, TargetVignette, DeltaTime, 1.5f);
     }
   }
+
+  // Dinamik Kamera Sarsıntısı (Camera Shake) optimizasyon amacıyla Tick'ten çıkarıldı.
+  // Gerçekleştirimi Timer'a taşındı.
 
   // ==== STAMINA YORGUNLUK SESİ (BREATHING) ====
 
@@ -668,61 +666,98 @@ AActor *AGercekCharacter::PerformInteractionTrace() const {
 }
 
 FText AGercekCharacter::GetInteractionPrompt() const {
+  // Optimizasyon: Her frame (Tick) hesaplamak yerine, timer ile 0.1s de bir atılan
+  // LineTrace'in sonucunu (önbellek) döndür.
+  return CachedInteractionPrompt;
+}
+
+void AGercekCharacter::PerformInteractionTracePeriodic() {
   AActor *HitActor = PerformInteractionTrace();
-  if (!HitActor)
-    return FText::GetEmpty();
+  CachedInteractableActor = HitActor;
+
+  if (!HitActor) {
+    CachedInteractionPrompt = FText::GetEmpty();
+    return;
+  }
 
   // Tüccar Kontrolü
   if (AMerchantBase *Merchant = Cast<AMerchantBase>(HitActor)) {
     FString FoundName = Merchant->GetMerchantName().ToString();
-    return FText::FromString(FString::Printf(TEXT("E - Takas %s"), *FoundName));
+    CachedInteractionPrompt = FText::FromString(FString::Printf(TEXT("E - Takas %s"), *FoundName));
+    return;
   }
 
   // Klasik Etkileşim Öğeleri Kontrolü
   if (HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass())) {
     FText ItemName = IInteractable::Execute_GetInteractableName(HitActor);
     if (!ItemName.IsEmpty()) {
-      return FText::FromString(
-          FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+      CachedInteractionPrompt = FText::FromString(FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+    } else {
+      CachedInteractionPrompt = FText::FromString(TEXT("E - Al"));
     }
-    return FText::FromString(TEXT("E - Al"));
+    return;
   }
 
-  return FText::GetEmpty();
+  CachedInteractionPrompt = FText::GetEmpty();
+}
+
+void AGercekCharacter::PlayCameraShakePeriodic() {
+  if (!WalkingCameraShakeClass) return;
+
+  if (APlayerController *PlayerController = Cast<APlayerController>(GetController())) {
+    float Speed = GetVelocity().Size();
+    bool bIsOnGround = GetCharacterMovement() && GetCharacterMovement()->IsMovingOnGround();
+
+    // Sadece yerdeyken ve en az 10 hızında (durmuyor) sarsıntı oynat
+    if (bIsOnGround && Speed > 10.0f) {
+      float ShakeScale = Speed / BaseWalkSpeed;
+      ShakeScale = FMath::Clamp(ShakeScale, 0.1f, 2.0f);
+      PlayerController->ClientStartCameraShake(WalkingCameraShakeClass, ShakeScale);
+    }
+  }
 }
 
 void AGercekCharacter::Interact() {
-  // 1. Durum Kontrolü: Ticaret ekranı zaten açıksa kapat ve işlemden çık
   if (ActiveTradeWidget != nullptr) {
     CloseTradeScreen();
     return;
   }
 
-  if (!FpsCameraComponent)
+  AActor *HitActor = PerformInteractionTrace();
+  if (!IsValid(HitActor)) {
     return;
-
-  // 2. Mesafe Belirleme: Kameranın merkezinden tam olarak 200 birim ileriye
-  // ışın at
-  FVector Start = FpsCameraComponent->GetComponentLocation();
-  FVector End = Start + (FpsCameraComponent->GetForwardVector() * 200.0f);
-
-  FHitResult Hit;
-  FCollisionQueryParams Params;
-  Params.AddIgnoredActor(this); // Işının oyuncunun kendisine çarpmasını engelle
-
-  // 3. Işın Gönderme (Raycast): Sadece görünür (Visibility) objelerle
-  // çarpışmayı test et
-  if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility,
-                                           Params)) {
-
-    // 4. Hedef Kontrolü: Çarpılan aktör bir AMerchantBase (Tüccar) sınıfından
-    // ise
-    if (AMerchantBase *HitMerchant = Cast<AMerchantBase>(Hit.GetActor())) {
-
-      // Başarılı hedef eşleşmesi durumunda tüccarın ekranını C++ tarafında aç
-      OpenTradeScreen(HitMerchant);
-    }
   }
+
+  if (AMerchantBase *HitMerchant = Cast<AMerchantBase>(HitActor)) {
+    OpenTradeScreen(HitMerchant);
+    return;
+  }
+
+  if (!HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass())) {
+    return;
+  }
+
+  if (HasAuthority()) {
+    IInteractable::Execute_OnInteract(HitActor, this);
+  } else {
+    ServerInteract(HitActor);
+  }
+}
+
+void AGercekCharacter::ServerInteract_Implementation(AActor *TargetActor) {
+  if (!IsValid(TargetActor)) {
+    return;
+  }
+
+  if (!TargetActor->GetClass()->ImplementsInterface(UInteractable::StaticClass())) {
+    return;
+  }
+
+  if (GetDistanceTo(TargetActor) > 250.0f) {
+    return;
+  }
+
+  IInteractable::Execute_OnInteract(TargetActor, this);
 }
 
 void AGercekCharacter::ToggleInventory() {
@@ -762,6 +797,10 @@ void AGercekCharacter::ToggleInventory() {
   } else {
     // ---- AÇ ---------------------------------------------------
     InventoryWidget->SetVisibility(ESlateVisibility::Visible);
+
+    if (InventoryComponent) {
+      InventoryComponent->NativeRefreshUI(InventoryWidget);
+    }
 
     // Fareyi göster.
     PC->bShowMouseCursor = true;
@@ -832,7 +871,8 @@ void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {
     break;
 
   case EItemType::Junk:
-    // Hurda: Artık radyasyonu azaltmaz, sadece ticari veya üretim amaçlı bir eşya (Trade/Barter).
+    // Hurda: Artık radyasyonu azaltmaz, sadece ticari veya üretim amaçlı bir
+    // eşya (Trade/Barter).
     break;
 
   case EItemType::AntiRad:
@@ -845,7 +885,9 @@ void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {
     Stamina = FMath::Clamp(Stamina, 0.0f, MaxStamina);
 
     if (GEngine) {
-      GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, TEXT("Radyasyon temizlendi, ancak yorgunluk hissediyorsun!"));
+      GEngine->AddOnScreenDebugMessage(
+          -1, 3.0f, FColor::Green,
+          TEXT("Radyasyon temizlendi, ancak yorgunluk hissediyorsun!"));
     }
     break;
 
@@ -864,21 +906,21 @@ void AGercekCharacter::ResetStaminaRecoveryBuff() {
 
 // --- HASAR KAYDİ (HealthRegen lockout için) ---
 float AGercekCharacter::TakeDamage(float DamageAmount,
-                                   struct FDamageEvent const& DamageEvent,
-                                   class AController* EventInstigator,
-                                   AActor* DamageCauser)
-{
-  const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+                                   struct FDamageEvent const &DamageEvent,
+                                   class AController *EventInstigator,
+                                   AActor *DamageCauser) {
+  const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent,
+                                               EventInstigator, DamageCauser);
 
-  if (ActualDamage > 0.0f && HasAuthority())
-  {
+  if (ActualDamage > 0.0f && HasAuthority()) {
     // Son hasar zamanını güncelle (can regen kilidi sıfırlanır)
     LastDamageTakenTime = GetWorld()->GetTimeSeconds();
 
     Health -= ActualDamage;
     Health = FMath::Clamp(Health, 0.0f, MaxHealth);
 
-    UE_LOG(LogTemp, Log, TEXT("[Damage] %.1f hasar alindi. Kalan can: %.1f"), ActualDamage, Health);
+    UE_LOG(LogTemp, Log, TEXT("[Damage] %.1f hasar alindi. Kalan can: %.1f"),
+           ActualDamage, Health);
   }
 
   return ActualDamage;
@@ -996,6 +1038,14 @@ void AGercekCharacter::ShowInventoryDetails() {
   }
 }
 
+void AGercekCharacter::HandleGridInventoryUpdated() {
+  if (!InventoryComponent || !IsValid(InventoryWidget)) {
+    return;
+  }
+
+  InventoryComponent->NativeRefreshUI(InventoryWidget);
+}
+
 // ==== ÇANTADAN KULLANMA VE YERE ATMA (USE & DROP) ====
 
 void AGercekCharacter::UseItemFromInventory(
@@ -1003,23 +1053,54 @@ void AGercekCharacter::UseItemFromInventory(
   if (ItemRowHandle.IsNull() || !InventoryComponent)
     return;
 
-  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(
-      TEXT("AGercekCharacter::UseItemFromInventory"));
-  if (!Row)
-    return;
+  const FItemDBRow *LegacyRow = ItemRowHandle.GetRow<FItemDBRow>(
+      TEXT("AGercekCharacter::UseItemFromInventory.Legacy"));
+  const FPostApocItemRow *GridRow = ItemRowHandle.GetRow<FPostApocItemRow>(
+      TEXT("AGercekCharacter::UseItemFromInventory.Grid"));
 
-  if (Row->ItemType == EItemType::Food || Row->ItemType == EItemType::Med || Row->ItemType == EItemType::AntiRad) {
-    // Grid'den 1 adet kaldır (tüm hücreleri serbest bırakır)
-    if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
-      // Amount olarak ItemValue kullan (iyileştirme miktarı)
-      ConsumeItem(Row->ItemType, static_cast<float>(Row->ItemValue));
+  EItemType ConsumeType = EItemType::Junk;
+  float ConsumeAmount = 0.0f;
+  bool bCanConsume = false;
+
+  if (LegacyRow) {
+    bCanConsume = LegacyRow->ItemType == EItemType::Food ||
+                  LegacyRow->ItemType == EItemType::Med ||
+                  LegacyRow->ItemType == EItemType::AntiRad;
+    ConsumeType = LegacyRow->ItemType;
+    ConsumeAmount = static_cast<float>(LegacyRow->ItemValue);
+  } else if (GridRow && GridRow->bCanConsume) {
+    bCanConsume = true;
+    ConsumeAmount = static_cast<float>(GridRow->BaseValue);
+
+    switch (GridRow->Category) {
+    case EPostApocItemCategory::Food:
+    case EPostApocItemCategory::Drink:
+      ConsumeType = EItemType::Food;
+      break;
+    case EPostApocItemCategory::Medical:
+      ConsumeType = EItemType::Med;
+      break;
+    default:
+      bCanConsume = false;
+      break;
     }
-  } else {
+  }
+
+  if (!bCanConsume) {
+    const FString ItemLabel =
+        LegacyRow ? LegacyRow->ItemName.ToString()
+                  : (GridRow ? GridRow->DisplayName.ToString()
+                             : ItemRowHandle.RowName.ToString());
     UE_LOG(
         LogTemp, Warning,
         TEXT(
-            "[AGercekCharacter] Tüketilemeyen eşya kullanılmaya calısıldı: %s"),
-        *Row->ItemName.ToString());
+            "[AGercekCharacter] Tuketilemeyen esya kullanilmaya calisildi: %s"),
+        *ItemLabel);
+    return;
+  }
+
+  if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
+    ConsumeItem(ConsumeType, ConsumeAmount);
   }
 }
 
@@ -1028,24 +1109,25 @@ void AGercekCharacter::DropItemFromInventory(
   if (ItemRowHandle.IsNull() || !InventoryComponent)
     return;
 
-  const FItemDBRow *Row = ItemRowHandle.GetRow<FItemDBRow>(
-      TEXT("AGercekCharacter::DropItemFromInventory"));
-  if (!Row)
-    return;
+  const FItemDBRow *LegacyRow = ItemRowHandle.GetRow<FItemDBRow>(
+      TEXT("AGercekCharacter::DropItemFromInventory.Legacy"));
+  const FPostApocItemRow *GridRow = ItemRowHandle.GetRow<FPostApocItemRow>(
+      TEXT("AGercekCharacter::DropItemFromInventory.Grid"));
 
-  // Sadece Tip olarak değil; Kategori (ItemCategory) olarak da 'Quest'
-  // seçiliyse objeyi yere atma.
-  if (Row->ItemType == EItemType::QuestItem ||
-      Row->ItemType == EItemType::Quest ||
-      Row->ItemCategory == EItemCategory::Quest) {
+  const bool bIsQuestItem =
+      (LegacyRow && (LegacyRow->ItemType == EItemType::QuestItem ||
+                     LegacyRow->ItemType == EItemType::Quest ||
+                     LegacyRow->ItemCategory == EItemCategory::Quest)) ||
+      (GridRow && GridRow->bQuestItem);
+
+  if (bIsQuestItem) {
     if (GEngine) {
       GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
-                                       TEXT("Görev eşyaları yere atılamaz."));
+                                       TEXT("Gorev esyalari yere atilamaz."));
     }
     return;
   }
 
-  // Grid'den kaldır, başarılıysa yere at
   if (InventoryComponent->RemoveItemFromGrid(ItemRowHandle.RowName)) {
     if (FpsCameraComponent) {
       FVector DropLocation = FpsCameraComponent->GetComponentLocation() +
@@ -1201,11 +1283,10 @@ void AGercekCharacter::ExecuteTrade() {
 
   // 3. Sunucu Tarafında Asıl Eşya Yer Değiştirme ve XP İşlemini Gerçekleştir
   // (RPC)
-  UTradeComponent *TradeComp = FindComponentByClass<UTradeComponent>();
-  if (TradeComp && ActiveMerchant->GetMerchantInventory()) {
+  if (TradeComponent && ActiveMerchant->GetMerchantInventory()) {
     // TradeComponent içindeki C++ mantığı: RemoveItem, TryAddItem ve XP
     // işlemlerini sunucuda yapar.
-    TradeComp->Server_ExecuteTrade(PlayerOfferItems, MerchantOfferItems,
+    TradeComponent->Server_ExecuteTrade(PlayerOfferItems, MerchantOfferItems,
                                    InventoryComponent,
                                    ActiveMerchant->GetMerchantInventory());
 
@@ -1232,3 +1313,6 @@ void AGercekCharacter::CloseTradeScreen() {
     PC->SetInputMode(GameMode);
   }
 }
+
+
+

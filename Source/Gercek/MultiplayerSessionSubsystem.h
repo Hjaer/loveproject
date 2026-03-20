@@ -34,9 +34,9 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	// ODAYI KURAN (Host) İÇİN FONKSİYON
-	// MaxPlayers=2 yaptık, LAN maçını kapattık (bIsLAN = false), yani doğrudan Steam'i hedefler.
+	// MaxPlayers=4 yaptık, LAN maçını kapattık (bIsLAN = false), yani doğrudan Steam'i hedefler.
 	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
-	void CreateServer(int32 MaxPlayers = 2, bool bIsLAN = false);
+	void CreateServer(int32 MaxPlayers = 4, bool bIsLAN = false);
 
 	// ODAYI ARAYAN (Client) İÇİN FONKSİYON
 	// MaxSearchResults: Steam'de aynı anda kaç açık oda arayacağımız.
@@ -61,6 +61,7 @@ public:
 protected:
 	// Steam arka planda işi bitirdiğinde C++ tarafında bizi uyaran iç fonksiyonlar
 	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnFindSessionsComplete(bool bWasSuccessful);
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 
@@ -73,4 +74,8 @@ private:
 	
 	// Yaptığımız aramanın (Find) detaylarını aklında tutan adres (Pointer)
 	TSharedPtr<class FOnlineSessionSearch> LastSessionSearch;
+
+	bool bCreateSessionAfterDestroy = false;
+	int32 PendingMaxPlayers = 4;
+	bool bPendingIsLAN = false;
 };

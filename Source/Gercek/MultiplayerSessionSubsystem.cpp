@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "MultiplayerSessionSubsystem.h"
+#include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Kismet/GameplayStatics.h"
@@ -30,7 +31,13 @@ void UMultiplayerSessionSubsystem::CreateServer(int32 MaxPlayers, bool bIsLAN)
 	auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
 	if (ExistingSession != nullptr)
 	{
+		bCreateSessionAfterDestroy = true;
+		PendingMaxPlayers = MaxPlayers;
+		bPendingIsLAN = bIsLAN;
+		SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(
+			FOnDestroySessionCompleteDelegate::CreateUObject(this, &UMultiplayerSessionSubsystem::OnDestroySessionComplete));
 		SessionInterface->DestroySession(NAME_GameSession);
+		return;
 	}
 
 	// Steam'den "Oda kuruldu!" cevabı geldiğinde bizim 'OnCreateSessionComplete' fonksiyonumuzun çalışması için dinleyiciyi bağlıyoruz.
@@ -39,7 +46,7 @@ void UMultiplayerSessionSubsystem::CreateServer(int32 MaxPlayers, bool bIsLAN)
 	// Oturum Ayarlarını (FOnlineSessionSettings) hazırlıyoruz
 	TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
 	SessionSettings->bIsLANMatch = bIsLAN;               // LAN mı Steam mi? Seçiyoruz.
-	SessionSettings->NumPublicConnections = MaxPlayers;    // Odaya kaç kişi girebilir? (2)
+	SessionSettings->NumPublicConnections = MaxPlayers;    // Odaya kaç kişi girebilir? (4)
 	SessionSettings->bAllowJoinInProgress = true;        // Oyun başlasa bile biri sonradan katılabilir mi?
 	SessionSettings->bAllowJoinViaPresence = true;       // Steam listesinden arkadaşın üstüne tıklayıp "Oyuna Katıl" denebilir mi?
 	SessionSettings->bShouldAdvertise = true;            // Odamız diğer oyuncular tarafından bulunabilsin mi? (Arama listesinde çıksın mı?)
@@ -51,6 +58,20 @@ void UMultiplayerSessionSubsystem::CreateServer(int32 MaxPlayers, bool bIsLAN)
 
 	// Ayarları hazırladık, şimdi Steam'e "Odayı Kur!" emrini veriyoruz.
 	SessionInterface->CreateSession(0, NAME_GameSession, *SessionSettings);
+}
+
+void UMultiplayerSessionSubsystem::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	SessionInterface->ClearOnDestroySessionCompleteDelegates(this);
+
+	if (bWasSuccessful && bCreateSessionAfterDestroy)
+	{
+		bCreateSessionAfterDestroy = false;
+		CreateServer(PendingMaxPlayers, bPendingIsLAN);
+		return;
+	}
+
+	bCreateSessionAfterDestroy = false;
 }
 
 void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
@@ -74,7 +95,7 @@ void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bo
 				PlayerController->bShowMouseCursor = false;
 			}
 
-			World->ServerTravel("/Game/FirstPerson/Lvl_FirstPerson?listen");
+			World->ServerTravel("/Game/Istanbul?listen");
 		}
 	}
 
@@ -99,6 +120,12 @@ void UMultiplayerSessionSubsystem::FindServer(int32 MaxSearchResults, bool bIsLA
 
 	// Kendi oyuncumuzu (LocalPlayer) temsil ederek aramayı başlat.
 	ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer || !LocalPlayer->GetPreferredUniqueNetId().IsValid())
+	{
+		TArray<FBlueprintSessionResult> EmptyResults;
+		OnFindSessionsCompleteEvent.Broadcast(false, EmptyResults);
+		return;
+	}
 	
 	// Note: Engine expects a UniqueNetIdRef, but passing the raw dereferenced pointer can cause C2665 error if implicit conversion fails
 	SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef());

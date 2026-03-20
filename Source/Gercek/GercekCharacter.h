@@ -11,8 +11,8 @@
 #include "GercekCharacter.generated.h"
 // clang-format on
 
-class AMerchantBase; // İleriye dönük ticaret aktörü tanımlaması
-
+class AMerchantBase; // Ileriye donuk ticaret aktoru tanimlamasi
+class UTradeComponent;
 // EItemType ve EItemRarity artik ItemTypes.h'de tanimli.
 // ConsumeItem fonksiyonu EItemType::Food, EItemType::Med vb. kullanir.
 
@@ -32,13 +32,16 @@ public:
 protected:
   virtual void BeginPlay() override;
   virtual void PawnClientRestart() override;
+  virtual void
+  GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &OutLifetimeProps) const override;
 
 public:
   virtual void Tick(float DeltaTime) override;
   virtual void SetupPlayerInputComponent(
       class UInputComponent *PlayerInputComponent) override;
   virtual void Jump() override;
-
+  UFUNCTION(Server, Reliable)
+  void ServerInteract(AActor *TargetActor);
   // Etkileşim fonksiyonu
   void Interact();
 
@@ -46,6 +49,17 @@ protected:
   // --- YENİ UZMAN (AAA) ETKİLEŞİM SİSTEMİ ---
   // Kamera açısından 300.0f uzunluğunda Line Trace gerçekleştirir
   AActor* PerformInteractionTrace() const;
+
+  // Optimizasyon: Etkileşim kontrolü Timer'ı ve Cache verisi
+  FTimerHandle InteractionTimerHandle;
+  UPROPERTY()
+  AActor* CachedInteractableActor;
+  FText CachedInteractionPrompt;
+  void PerformInteractionTracePeriodic();
+
+  // Optimizasyon: Kamera Sarsıntısı Timer'ı
+  FTimerHandle CameraShakeTimerHandle;
+  void PlayCameraShakePeriodic();
 
 public:
   // HUD üzerinden her kare veya periyodik okunarak etkileşim metnini çeker (Zero-Blueprint Policy)
@@ -61,6 +75,7 @@ protected:
   void ResetStaminaRecoveryBuff();
 
   // Son hasar alınan zamanı takip eden sayış (Health regen lockout için)
+  UPROPERTY(Replicated)
   float LastDamageTakenTime;
 
   // Haşar sistemi ile entegre: Son hasar zamanını günceller
@@ -163,6 +178,8 @@ protected:
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
   UPostApocInventoryComponent *InventoryComponent;
 
+  UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Trade")
+  UTradeComponent *TradeComponent;
   // ==== TİCARET VE TECRÜBE SİSTEMİ ====
 public:
   
@@ -199,6 +216,9 @@ public:
   // Envanter içerisindeki tüm eşyaları ekrana ve log'a yazdırır
   UFUNCTION(BlueprintCallable, Category = "Inventory")
   void ShowInventoryDetails();
+
+  UFUNCTION()
+  void HandleGridInventoryUpdated();
 
   // ==== TİCARET EKRANI (TRADE UI) YÖNETİMİ ====
   
@@ -305,4 +325,5 @@ protected:
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement Stats")
   float InjuredSprintSpeed;
-};
+};
+

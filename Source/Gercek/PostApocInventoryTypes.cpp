@@ -18,6 +18,7 @@ UPostApocInventoryComponent::UPostApocInventoryComponent()
     // Tick kapalı: ızgara durumu sadece mutasyonlarda değişir,
     // her frame güncellenmesi gereksizdir.
     PrimaryComponentTick.bCanEverTick = false;
+    SetIsReplicatedByDefault(true);
 }
 
 void UPostApocInventoryComponent::BeginPlay()
@@ -110,6 +111,12 @@ bool UPostApocInventoryComponent::TryAddItem(FDataTableRowHandle ItemRowHandle)
         return false;
     }
 
+    // UI refresh ve sonraki drop/trade islemleri icin aktif tabloyu sabitle.
+    if (!ItemDataTable && ItemRowHandle.DataTable)
+    {
+        ItemDataTable = const_cast<UDataTable*>(ItemRowHandle.DataTable.Get());
+    }
+
     // DataTable'dan satır verisini çek (FPostApocItemRow — doğru struct).
     const FPostApocItemRow* ItemData = ItemRowHandle.GetRow<FPostApocItemRow>(TEXT("TryAddItem"));
     if (!ItemData)
@@ -159,6 +166,7 @@ bool UPostApocInventoryComponent::TryAddItem(FDataTableRowHandle ItemRowHandle)
                *ItemData->DisplayName.ToString(),
                FoundLocation.X, FoundLocation.Y,
                bIsRotatedWhenPlaced ? TEXT("Evet") : TEXT("Hayir"));
+        BroadcastGridChanged();
         return true;
     }
 
@@ -231,6 +239,7 @@ bool UPostApocInventoryComponent::RemoveItemFromGrid(FName ItemRowName)
     UE_LOG(LogTemp, Log,
            TEXT("[Grid Inventory] '%s' izgaradan kaldirildi."),
            *ItemRowName.ToString());
+    BroadcastGridChanged();
     return true;
 }
 
@@ -261,23 +270,29 @@ int32 UPostApocInventoryComponent::GetItemCountInGrid(FName ItemRowName) const
 float UPostApocInventoryComponent::GetInventoryValue() const
 {
     float TotalValue = 0.0f;
-    TSet<FName> CountedItems;
+    if (!ItemDataTable) {
+        return TotalValue;
+    }
 
+    TMap<FName, int32> OccupiedCellCounts;
     for (const FGridSlotData& SlotData : OccupiedSlotsArray)
     {
-        if (!CountedItems.Contains(SlotData.ItemID))
-        {
-            if (ItemDataTable)
-            {
-                const FPostApocItemRow* ItemData = ItemDataTable->FindRow<FPostApocItemRow>(SlotData.ItemID, TEXT("GetInventoryValue"));
-                if (ItemData)
-                {
-                    TotalValue += ItemData->BaseValue;
-                }
-            }
-            CountedItems.Add(SlotData.ItemID);
-        }
+        OccupiedCellCounts.FindOrAdd(SlotData.ItemID)++;
     }
+
+    for (const TPair<FName, int32>& Entry : OccupiedCellCounts)
+    {
+        const FPostApocItemRow* ItemData =
+            ItemDataTable->FindRow<FPostApocItemRow>(Entry.Key, TEXT("GetInventoryValue"));
+        if (!ItemData) {
+            continue;
+        }
+
+        const int32 ItemArea = FMath::Max(1, ItemData->ItemSize.X * ItemData->ItemSize.Y);
+        const int32 ItemCount = FMath::Max(1, Entry.Value / ItemArea);
+        TotalValue += ItemData->BaseValue * ItemCount;
+    }
+
     return TotalValue;
 }
 
@@ -401,6 +416,7 @@ bool UPostApocInventoryComponent::HandleItemDrop(FName ItemRowName, FIntPoint Ne
                      OccupiedSlotsArray.Add(NewSlot);
                  }
              }
+             BroadcastGridChanged();
              return true;
         }
     }
@@ -431,4 +447,9 @@ TMap<FIntPoint, FName> UPostApocInventoryComponent::GetOccupiedSlots() const
         Map.Add(SlotData.Location, SlotData.ItemID);
     }
     return Map;
+}
+
+void UPostApocInventoryComponent::BroadcastGridChanged()
+{
+    OnGridUpdated.Broadcast();
 }
