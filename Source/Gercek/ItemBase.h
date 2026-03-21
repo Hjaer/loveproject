@@ -4,7 +4,7 @@
 #include "Engine/DataTable.h"
 #include "GameFramework/Actor.h"
 #include "Interactable.h"
-#include "ItemTypes.h"
+#include "PostApocItemTypes.h"
 
 // clang-format off
 #include "ItemBase.generated.h"
@@ -42,7 +42,7 @@ public:
   // Tablo sabit: PostApocItems [cite: 2026-02-20]
   // ---------------------------------------------------------------
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Data",
-            meta = (RowType = "ItemDBRow"))
+            meta = (RowType = "PostApocItemRow"))
   FDataTableRowHandle ItemRowHandle;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Physics",

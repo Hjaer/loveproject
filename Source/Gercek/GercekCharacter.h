@@ -6,7 +6,7 @@
 #include "GameFramework/Character.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "ItemTypes.h"              // EItemType, EItemRarity, FItemDBRow
+#include "ItemTypes.h"              // EItemType, EItemRarity
 #include "PostApocItemTypes.h"      // ETradeKnowledge, EPostApocItemCategory vb.
 #include "PostApocInventoryTypes.h" // UPostApocInventoryComponent
 #include "GercekCharacter.generated.h"

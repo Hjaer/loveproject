@@ -1364,8 +1364,6 @@ void AGercekCharacter::UseItemInstanceFromInventory(FGuid ItemInstanceId) {
     return;
   }
 
-  const FItemDBRow *LegacyRow = ItemRowHandle.GetRow<FItemDBRow>(
-      TEXT("AGercekCharacter::UseItemFromInventory.Legacy"));
   const FPostApocItemRow *GridRow = ItemRowHandle.GetRow<FPostApocItemRow>(
       TEXT("AGercekCharacter::UseItemFromInventory.Grid"));
 
@@ -1373,14 +1371,7 @@ void AGercekCharacter::UseItemInstanceFromInventory(FGuid ItemInstanceId) {
   float ConsumeAmount = 0.0f;
   bool bCanConsume = false;
 
-  if (LegacyRow) {
-    bCanConsume = LegacyRow->ItemType == EItemType::Food ||
-                  LegacyRow->ItemType == EItemType::Drink ||
-                  LegacyRow->ItemType == EItemType::Med ||
-                  LegacyRow->ItemType == EItemType::AntiRad;
-    ConsumeType = LegacyRow->ItemType;
-    ConsumeAmount = static_cast<float>(LegacyRow->ItemValue);
-  } else if (GridRow && GridRow->bCanConsume) {
+  if (GridRow && GridRow->bCanConsume) {
     switch (GridRow->ConsumeEffectType) {
     case EPostApocConsumableEffectType::Food:
       ConsumeType = EItemType::Food;
@@ -1411,9 +1402,7 @@ void AGercekCharacter::UseItemInstanceFromInventory(FGuid ItemInstanceId) {
 
   if (!bCanConsume) {
     const FString ItemLabel =
-        LegacyRow ? LegacyRow->ItemName.ToString()
-                  : (GridRow ? GridRow->DisplayName.ToString()
-                             : ItemRowHandle.RowName.ToString());
+        GridRow ? GridRow->DisplayName.ToString() : ItemRowHandle.RowName.ToString();
     UE_LOG(
         LogTemp, Warning,
         TEXT(
@@ -1464,16 +1453,10 @@ void AGercekCharacter::DropItemInstanceFromInventory(FGuid ItemInstanceId) {
 
   const FDataTableRowHandle& ItemRowHandle = ItemInstanceView.ItemHandle;
 
-  const FItemDBRow *LegacyRow = ItemRowHandle.GetRow<FItemDBRow>(
-      TEXT("AGercekCharacter::DropItemFromInventory.Legacy"));
   const FPostApocItemRow *GridRow = ItemRowHandle.GetRow<FPostApocItemRow>(
       TEXT("AGercekCharacter::DropItemFromInventory.Grid"));
 
-  const bool bIsQuestItem =
-      (LegacyRow && (LegacyRow->ItemType == EItemType::QuestItem ||
-                     LegacyRow->ItemType == EItemType::Quest ||
-                     LegacyRow->ItemCategory == EItemCategory::Quest)) ||
-      (GridRow && GridRow->bQuestItem);
+  const bool bIsQuestItem = GridRow && GridRow->bQuestItem;
 
   if (bIsQuestItem) {
     if (GEngine) {

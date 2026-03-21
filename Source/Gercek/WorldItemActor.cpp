@@ -31,10 +31,10 @@ void AWorldItemActor::BeginPlay() { Super::BeginPlay(); }
 // ---------------------------------------------------------------------------
 // Helper: resolve the DataTable row for this actor.
 // ---------------------------------------------------------------------------
-static const FItemDBRow *ResolveRow(const FDataTableRowHandle &Handle) {
+static const FPostApocItemRow *ResolveRow(const FDataTableRowHandle &Handle) {
   if (Handle.IsNull())
     return nullptr;
-  return Handle.GetRow<FItemDBRow>(TEXT("WorldItemActor::ResolveRow"));
+  return Handle.GetRow<FPostApocItemRow>(TEXT("WorldItemActor::ResolveRow"));
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ static const FItemDBRow *ResolveRow(const FDataTableRowHandle &Handle) {
 // ---------------------------------------------------------------------------
 void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
   // Guard: row not configured.
-  const FItemDBRow *Row = ResolveRow(ItemRowHandle);
+  const FPostApocItemRow *Row = ResolveRow(ItemRowHandle);
   if (!Row) {
     UE_LOG(LogTemp, Warning,
            TEXT("[WorldItem] '%s' has no valid ItemRowHandle. Cannot pick up."),
@@ -76,7 +76,7 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
     UE_LOG(LogTemp, Warning,
            TEXT("[WorldItem] Could not pick up '%s'. Grid is full or item is "
                 "invalid."),
-           *Row->ItemName.ToString());
+           *Row->DisplayName.ToString());
   }
 }
 
@@ -96,14 +96,14 @@ FText AWorldItemActor::GetInteractionPrompt_Implementation(
       FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
 }
 FText AWorldItemActor::GetInteractableName_Implementation() {
-  const FItemDBRow *Row = ResolveRow(ItemRowHandle);
-  if (!Row || Row->ItemName.IsEmpty()) {
+  const FPostApocItemRow *Row = ResolveRow(ItemRowHandle);
+  if (!Row || Row->DisplayName.IsEmpty()) {
     return FText::GetEmpty();
   }
   // Sadece ham eşya adını döndür.
   // GercekCharacter::CheckForInteractables zaten "[E] Al - " ön ekini ekler;
   // burada tekrar eklersek ekranda çift prefix görünür.
-  return Row->ItemName;
+  return Row->DisplayName;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ void AWorldItemActor::InitializeItemData(const FDataTableRowHandle& InHandle,
   ItemCondition = FMath::Clamp(InCondition, 10, 100);
   ItemFillState = InFillState;
 
-  const FItemDBRow *Row = ResolveRow(ItemRowHandle);
+  const FPostApocItemRow *Row = ResolveRow(ItemRowHandle);
   if (!Row) return;
 
   if (!Row->PickupMesh.IsNull() && MeshComponent) {
@@ -133,7 +133,7 @@ void AWorldItemActor::InitializeItemData(const FDataTableRowHandle& InHandle,
       MeshComponent->SetStaticMesh(LoadedMesh);
       
       // Eşya ağırlığına göre fizik kuralları
-      const bool bIsHeavy = (Row->ItemWeight > 5.0f);
+      const bool bIsHeavy = (Row->Weight > 5.0f);
       MeshComponent->SetSimulatePhysics(!bIsHeavy);
     }
   }

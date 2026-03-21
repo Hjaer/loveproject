@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
 
 // GENERATED HEADER: MUST BE THE LAST INCLUDE. NON-NEGOTIABLE.
 #include "PostApocItemTypes.generated.h"
@@ -23,7 +25,8 @@ enum class EPostApocItemCategory : uint8 {
   Weapon UMETA(DisplayName = "Weapon"),
   Ammo UMETA(DisplayName = "Ammo"),
   Tool UMETA(DisplayName = "Tool"),
-  Valuable UMETA(DisplayName = "Valuable")
+  Valuable UMETA(DisplayName = "Valuable"),
+  Quest UMETA(DisplayName = "Quest")
 };
 
 UENUM(BlueprintType)
@@ -85,7 +88,7 @@ public:
   EPostApocItemCategory Category = EPostApocItemCategory::Junk;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Asset References")
-  FName MeshPath;
+  TSoftObjectPtr<class UStaticMesh> PickupMesh;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Asset References")
   TSoftObjectPtr<class UTexture2D> ItemIcon;

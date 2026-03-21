@@ -25,7 +25,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pickup")
 	TObjectPtr<UStaticMeshComponent> PickupMesh = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (RowType = "ItemDBRow"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (RowType = "PostApocItemRow"))
 	FDataTableRowHandle ItemRowHandle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
@@ -56,7 +56,7 @@ public:
 	virtual FDataTableRowHandle GetItemData_Implementation() override;
 
 protected:
-	const struct FItemDBRow* ResolveItemRow() const;
+	const struct FPostApocItemRow* ResolveItemRow() const;
 	void ApplyVisualFromData();
 	EConsumableFillState ResolveFillStateForPickup() const;
 };

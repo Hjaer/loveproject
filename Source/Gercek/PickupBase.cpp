@@ -2,7 +2,6 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
-#include "ItemTypes.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocItemTypes.h"
 
@@ -78,13 +77,13 @@ FText APickupBase::GetInteractionPrompt_Implementation(AGercekCharacter* Player)
 
 FText APickupBase::GetInteractableName_Implementation()
 {
-	const FItemDBRow* Row = ResolveItemRow();
-	if (!Row || Row->ItemName.IsEmpty())
+	const FPostApocItemRow* Row = ResolveItemRow();
+	if (!Row || Row->DisplayName.IsEmpty())
 	{
 		return FText::GetEmpty();
 	}
 
-	return Row->ItemName;
+	return Row->DisplayName;
 }
 
 FDataTableRowHandle APickupBase::GetItemData_Implementation()
@@ -92,19 +91,19 @@ FDataTableRowHandle APickupBase::GetItemData_Implementation()
 	return ItemRowHandle;
 }
 
-const FItemDBRow* APickupBase::ResolveItemRow() const
+const FPostApocItemRow* APickupBase::ResolveItemRow() const
 {
 	if (ItemRowHandle.IsNull())
 	{
 		return nullptr;
 	}
 
-	return ItemRowHandle.GetRow<FItemDBRow>(TEXT("PickupBase::ResolveItemRow"));
+	return ItemRowHandle.GetRow<FPostApocItemRow>(TEXT("PickupBase::ResolveItemRow"));
 }
 
 void APickupBase::ApplyVisualFromData()
 {
-	const FItemDBRow* Row = ResolveItemRow();
+	const FPostApocItemRow* Row = ResolveItemRow();
 	if (!Row || !PickupMesh)
 	{
 		return;
@@ -118,7 +117,7 @@ void APickupBase::ApplyVisualFromData()
 		}
 	}
 
-	const bool bIsHeavy = Row->ItemWeight > HeavyWeightThreshold;
+	const bool bIsHeavy = Row->Weight > HeavyWeightThreshold;
 	PickupMesh->SetSimulatePhysics(!bIsHeavy);
 }
 

@@ -5,7 +5,6 @@
 #include "Engine/DataTable.h"
 #include "UObject/Interface.h"
 
-#include "ItemTypes.h"
 #include "PostApocItemTypes.h"
 
 #include "PostApocInventoryTypes.generated.h"
@@ -23,7 +22,7 @@ class GERCEK_API IInventoryInterface {
 public:
   UFUNCTION(BlueprintCallable, BlueprintNativeEvent,
             Category = "PostApoc Inventory")
-  void GetItemDetails(FName ItemID, FItemDBRow &OutItemData,
+  void GetItemDetails(FName ItemID, FPostApocItemRow &OutItemData,
                       float &OutCondition);
 
   UFUNCTION(BlueprintCallable, BlueprintNativeEvent,

@@ -25,7 +25,7 @@ static UDataTable *ResolvePostApocItemsDataTable() {
 }
 
 static FDataTableRowHandle BuildPostApocHandle(
-    const FDataTableRowHandle& SourceHandle) {
+    const FDataTableRowHandle &SourceHandle) {
   FDataTableRowHandle Handle;
   Handle.RowName = SourceHandle.RowName;
   Handle.DataTable =
@@ -63,8 +63,8 @@ void AItemBase::OnConstruction(const FTransform &Transform) {
   }
 
   // Scope-local resolve only; no raw pointer stored (Zero-Pointer Policy).
-  const FItemDBRow *Row =
-      Handle.GetRow<FItemDBRow>(TEXT("ItemBase::OnConstruction"));
+  const FPostApocItemRow *Row =
+      Handle.GetRow<FPostApocItemRow>(TEXT("ItemBase::OnConstruction"));
   if (!Row) {
     return;
   }
@@ -76,7 +76,7 @@ void AItemBase::OnConstruction(const FTransform &Transform) {
     }
   }
 
-  const bool bIsHeavy = Row->ItemWeight > HeavyWeightThreshold;
+  const bool bIsHeavy = Row->Weight > HeavyWeightThreshold;
   ItemMesh->SetSimulatePhysics(!bIsHeavy);
 }
 
@@ -114,12 +114,12 @@ FText AItemBase::GetInteractableName_Implementation() {
     return FText::GetEmpty();
   }
   const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle);
-  const FItemDBRow *Row =
-      Handle.GetRow<FItemDBRow>(TEXT("ItemBase::GetInteractableName"));
-  if (!Row || Row->ItemName.IsEmpty()) {
+  const FPostApocItemRow *Row =
+      Handle.GetRow<FPostApocItemRow>(TEXT("ItemBase::GetInteractableName"));
+  if (!Row || Row->DisplayName.IsEmpty()) {
     return FText::GetEmpty();
   }
-  return Row->ItemName;
+  return Row->DisplayName;
 }
 
 FDataTableRowHandle AItemBase::GetItemData_Implementation() {
