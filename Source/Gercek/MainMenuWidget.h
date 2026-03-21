@@ -2,150 +2,168 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "MultiplayerSessionSubsystem.h"
 #include "MainMenuWidget.generated.h"
 
 class UButton;
-class UWidgetSwitcher;
 class UComboBoxString;
-class UCheckBox;
-class USlider;
-class UProgressBar;
+class UEditableTextBox;
 class UImage;
 class UMultiplayerSessionSubsystem;
+class UWidget;
+class UWidgetSwitcher;
 
-// Meryem'in güncel Blueprint hiyerarşisine birebir uyumlu (Görsele Göre) Optimizasyonlu Sınıf
 UCLASS()
 class GERCEK_API UMainMenuWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
+public:
+	UFUNCTION(BlueprintCallable, Category = "Main Menu")
+	void RefreshJoinServerLists();
+
+	UFUNCTION(BlueprintCallable, Category = "Main Menu")
+	void JoinListedServer(const FGercekSessionBrowserResult& ServerResult, const FString& Password);
+
+	UFUNCTION(BlueprintCallable, Category = "Main Menu")
+	void OpenInvitePanel();
+
+	UFUNCTION(BlueprintPure, Category = "Main Menu")
+	bool HasContinueSave() const;
+
+	UFUNCTION(BlueprintPure, Category = "Main Menu")
+	FGercekContinueSessionInfo GetContinueSaveInfo() const;
+
 protected:
 	virtual bool Initialize() override;
-
-	// Widget ekrana ilk geldiği anda, fareyi ve girişi sadece arayüze kitlemek için kullanacağız.
 	virtual void NativeConstruct() override;
-
-	// Ekranda boşluğa (veya resme) tıklandığında tıklamayı arkaya sızdırmadan YUTMAK için kullanılır.
+	virtual void NativeDestruct() override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	/* ========================================================
-	 * 1. ARKA PLAN VE TELEVİZYONLAR (Switcher)
-	 * ======================================================== */
-	UPROPERTY(meta = (BindWidget))
-	UImage* IIMG_Background;
+	UFUNCTION(BlueprintImplementableEvent, Category = "Main Menu")
+	void BP_OnServerBrowserResultsUpdated(const TArray<FGercekSessionBrowserResult>& Results);
 
-	UPROPERTY(meta = (BindWidget))
-	UWidgetSwitcher* WS_MenuPages;
+	UFUNCTION(BlueprintImplementableEvent, Category = "Main Menu")
+	void BP_OnSteamFriendsUpdated(const TArray<FGercekSteamFriendInfo>& Friends);
 
-	UPROPERTY(meta = (BindWidget))
-	UWidgetSwitcher* WS_AyarDetaylari;
+	UFUNCTION(BlueprintImplementableEvent, Category = "Main Menu")
+	void BP_OnContinueAvailabilityUpdated(bool bHasAvailableSave, const FGercekContinueSessionInfo& ContinueInfo);
 
-	/* ========================================================
-	 * 2. ANA VE SUNUCU BUTONLARI
-	 * ======================================================== */
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_Play;
+	UFUNCTION(BlueprintImplementableEvent, Category = "Main Menu")
+	void BP_OnMenuStatusMessage(const FString& Message);
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_Settings;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IIMG_Background = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_Quit;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> WS_MenuPages = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_CreateServer;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> WS_MainMenu = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_JoinServer;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_MainMenu = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_BackFromPlay;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_NewGame = nullptr;
 
-	/* ========================================================
-	 * 3. AYARLAR SOL YAN PANEL KATEGORİ BUTONLARI
-	 * ======================================================== */
-	UPROPERTY(meta = (BindWidget))
-	UButton* BTN_GERCEK_GORUNTU;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_Continue = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* BTN_GERCEK_KONTROL;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_Exit = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* BTN_GERCEK_SES;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_JoinServer = nullptr;
 
-	// Geri Butonu (Ayarlardan Ana Menüye Dönüş)
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_BackFromSettings;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_CreateServer = nullptr;
 
-	/* ========================================================
-	 * 4. GÖRÜNTÜ AYARLARI KONTROLLERİ (Video Settings)
-	 * ======================================================== */
-	UPROPERTY(meta = (BindWidget))
-	UComboBoxString* CB_Quality;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_BackToMain = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UComboBoxString* CB_WindowMode;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_Create = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UCheckBox* Chk_VSync;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_InviteFriends = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UButton* Button_ApplyVideo;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_BackToNewGame = nullptr;
 
-	/* ========================================================
-	 * 5. SES AYARLARI (Audio Settings)
-	 * ======================================================== */
-	
-	// --- Genel Ses ---
-	UPROPERTY(meta = (BindWidget))
-	USlider* Slider_MasterVolume;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UComboBoxString> ServerType = nullptr;
 
-	UPROPERTY(meta = (BindWidget))
-	UProgressBar* PB_MasterVolume;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UEditableTextBox> InputPassword = nullptr;
 
-	// --- Efekt Sesi (SFX) ---
-	UPROPERTY(meta = (BindWidget))
-	USlider* Slider_SFXVolume;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
+	int32 MainPageIndex = 0;
 
-	UPROPERTY(meta = (BindWidget))
-	UProgressBar* PB_SFXVolume;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
+	int32 NewGamePageIndex = 1;
 
-	// --- Müzik Sesi (Music) ---
-	UPROPERTY(meta = (BindWidget))
-	USlider* Slider_MusicVolume;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
+	int32 CreateServerPageIndex = 2;
 
-	UPROPERTY(meta = (BindWidget))
-	UProgressBar* PB_MusicVolume;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
+	int32 JoinServerPageIndex = 3;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
+	int32 InviteFriendsPageIndex = 4;
 
 private:
-	/* ========================================================
-	 * FONKSİYON TETİKLEYİCİLERİ (OnClicked & OnValueChanged)
-	 * ======================================================== */
+	UFUNCTION()
+	void OnNewGameClicked();
 
-	UFUNCTION() void OnPlayClicked();
-	UFUNCTION() void OnSettingsClicked();
-	UFUNCTION() void OnQuitClicked();
+	UFUNCTION()
+	void OnContinueClicked();
 
-	UFUNCTION() void OnCreateServerClicked();
-	UFUNCTION() void OnJoinServerClicked();
-	UFUNCTION() void OnBackFromPlayClicked();
+	UFUNCTION()
+	void OnExitClicked();
 
-	UFUNCTION() void OnBTN_GERCEK_GORUNTU_Clicked();
-	UFUNCTION() void OnBTN_GERCEK_KONTROL_Clicked();
-	UFUNCTION() void OnBTN_GERCEK_SES_Clicked();
+	UFUNCTION()
+	void OnJoinServerClicked();
 
-	UFUNCTION() void OnBackFromSettingsClicked();
-	UFUNCTION() void OnApplyVideoClicked();
+	UFUNCTION()
+	void OnCreateServerClicked();
 
-	// --- Ses Slider Değişim (OnValueChanged) Tetikleyicileri ---
-	UFUNCTION() void OnMasterVolumeChanged(float Value);
-	UFUNCTION() void OnSFXVolumeChanged(float Value);
-	UFUNCTION() void OnMusicVolumeChanged(float Value);
+	UFUNCTION()
+	void OnBackToMainClicked();
 
-	/* ========================================================
-	 * ARKA PLAN SİSTEMLERİ
-	 * ======================================================== */
+	UFUNCTION()
+	void OnCreateClicked();
+
+	UFUNCTION()
+	void OnInviteFriendsClicked();
+
+	UFUNCTION()
+	void OnBackToNewGameClicked();
+
+	UFUNCTION()
+	void HandleCreateSessionComplete(bool bWasSuccessful);
+
+	UFUNCTION()
+	void HandleJoinSessionComplete(bool bWasSuccessful);
+
+	UFUNCTION()
+	void HandleServerBrowserResultsUpdated(const TArray<FGercekSessionBrowserResult>& Results);
+
+	UFUNCTION()
+	void HandleSteamFriendsUpdated(const TArray<FGercekSteamFriendInfo>& Friends);
+
+	UFUNCTION()
+	void HandleContinueAvailabilityUpdated(bool bHasAvailableSave, const FGercekContinueSessionInfo& ContinueInfo);
+
+	UFUNCTION()
+	void HandleOperationMessage(const FString& Message);
+
+	UWidgetSwitcher* ResolveMenuSwitcher() const;
+	void SetActivePage(int32 PageIndex) const;
+	EGercekServerVisibility ResolveSelectedServerVisibility() const;
+	void EnsureDefaultServerTypeOptions();
+
 	UPROPERTY()
-	UMultiplayerSessionSubsystem* MultiplayerSubsystem;
+	TObjectPtr<UMultiplayerSessionSubsystem> MultiplayerSubsystem = nullptr;
 };

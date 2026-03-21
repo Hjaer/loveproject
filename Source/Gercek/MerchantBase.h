@@ -1,51 +1,62 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
 #include "Engine/DataTable.h"
+#include "GameFramework/Character.h"
+#include "GercekHostSaveGame.h"
+#include "Interactable.h"
+#include "PostApocInventoryTypes.h"
 #include "MerchantBase.generated.h"
 
-// Ileriye dönük tanımlamalar (Forward declarations)
-class UPostApocInventoryComponent;
-
 UCLASS()
-class GERCEK_API AMerchantBase : public ACharacter
+class GERCEK_API AMerchantBase : public ACharacter, public IInteractable
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    AMerchantBase();
+	AMerchantBase();
 
 protected:
-    virtual void BeginPlay() override;
+	virtual void BeginPlay() override;
 
 public:
-    // Tüccarın görüntülenen mağaza adı
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Info")
-    FText MerchantName;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Info")
+	FText MerchantName;
 
-    // Tüccara ait ızgara tabanlı özel envanter bileşeni
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Merchant Inventory")
-    UPostApocInventoryComponent* MerchantInventory;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Merchant Inventory")
+	UPostApocInventoryComponent* MerchantInventory = nullptr;
 
-    // Tüccarın sahip olacağı ızgara (grid) sütun sayısı
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
-    int32 GridColumns = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
+	int32 GridColumns = 10;
 
-    // Tüccarın sahip olacağı ızgara (grid) satır sayısı
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
-    int32 GridRows = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
+	int32 GridRows = 10;
 
-    // Başlangıçta tüccarın envanter raflarına yerleştirilecek eşya listesi
-    // Zero-Pointer policy: FDataTableRowHandle kullanımı
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
-    TArray<FDataTableRowHandle> InitialStock;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
+	TArray<FDataTableRowHandle> InitialStock;
 
-    // -- Blueprint Getter Fonksiyonları (Encapsulation) --
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Persistence")
+	FString PersistentId;
 
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Merchant Info")
-    FText GetMerchantName() const { return MerchantName; }
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Merchant Info")
+	FText GetMerchantName() const { return MerchantName; }
 
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Merchant Inventory")
-    UPostApocInventoryComponent* GetMerchantInventory() const { return MerchantInventory; }
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Merchant Inventory")
+	UPostApocInventoryComponent* GetMerchantInventory() const { return MerchantInventory; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
+	FString GetPersistentId() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Persistence")
+	void ExportPersistentInventory(TArray<FGercekSavedGridSlot>& OutSlots,
+		FString& OutDataTablePath) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Persistence")
+	void ImportPersistentInventory(const TArray<FGercekSavedGridSlot>& InSlots,
+		UDataTable* InDataTable);
+
+	virtual void OnInteract_Implementation(class AGercekCharacter* Player) override;
+	virtual FText GetInteractionPrompt_Implementation(class AGercekCharacter* Player) override;
+	virtual FText GetInteractableName_Implementation() override;
+	virtual FDataTableRowHandle GetItemData_Implementation() override;
 };

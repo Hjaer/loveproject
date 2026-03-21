@@ -7,6 +7,7 @@
 #include "GameFramework/Actor.h"
 #include "Interactable.h"
 #include "ItemData.h"
+#include "PostApocItemTypes.h"
 
 // clang-format off
 #include "WorldItemActor.generated.h"
@@ -28,12 +29,29 @@ public:
   // --- IInteractable interface ---
   virtual void
   OnInteract_Implementation(class AGercekCharacter *Player) override;
+  virtual FText GetInteractionPrompt_Implementation(class AGercekCharacter *Player) override;
   virtual FText GetInteractableName_Implementation() override;
   virtual FDataTableRowHandle GetItemData_Implementation() override;
 
   // Çantadan yere atıldığında (Spawning) Mesh ve Fiziklerin derhal kurulması için çalışır.
   UFUNCTION(BlueprintCallable, Category = "Survival Item")
-  void InitializeItemData(const FDataTableRowHandle& InHandle);
+  void InitializeItemData(
+      const FDataTableRowHandle& InHandle, int32 InCondition = 100,
+      EConsumableFillState InFillState = EConsumableFillState::NotApplicable);
+
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
+  bool IsPersistentWorldDrop() const { return bPersistentWorldDrop; }
+
+  UFUNCTION(BlueprintCallable, Category = "Persistence")
+  void SetPersistentWorldDrop(bool bInPersistentWorldDrop) {
+    bPersistentWorldDrop = bInPersistentWorldDrop;
+  }
+
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
+  int32 GetItemCondition() const { return ItemCondition; }
+
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
+  EConsumableFillState GetItemFillState() const { return ItemFillState; }
 
 protected:
   // Physical mesh in the world
@@ -44,4 +62,14 @@ protected:
   // Editörden hem tabloyu hem satırı seçebilirsiniz.
   UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival Item")
   FDataTableRowHandle ItemRowHandle;
+
+  UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival Item",
+            meta = (ClampMin = "10", ClampMax = "100"))
+  int32 ItemCondition = 100;
+
+  UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival Item")
+  EConsumableFillState ItemFillState = EConsumableFillState::NotApplicable;
+
+  UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Persistence")
+  bool bPersistentWorldDrop = false;
 };

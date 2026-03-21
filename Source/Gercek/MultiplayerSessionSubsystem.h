@@ -1,27 +1,170 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/GameInstanceSubsystem.h"
+#include "FindSessionsCallbackProxy.h"
+#include "GameFramework/SaveGame.h"
 #include "Interfaces/OnlineSessionInterface.h"
-#include "FindSessionsCallbackProxy.h" // FBlueprintSessionResult için gerekli
+#include "Subsystems/GameInstanceSubsystem.h"
 #include "MultiplayerSessionSubsystem.generated.h"
 
-// --- DELEGATES (Temsilciler - Numaratörlerimiz) ---
-// Oda Kurma ve Odaya Katılma sadece "Başarılı mı (true/false)?" bilgisini döndürür.
+UENUM(BlueprintType)
+enum class EGercekServerVisibility : uint8
+{
+	Public UMETA(DisplayName = "Public"),
+	FriendsOnly UMETA(DisplayName = "FriendsOnly"),
+	Private UMETA(DisplayName = "Private")
+};
+
+USTRUCT(BlueprintType)
+struct FGercekSessionConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	int32 MaxPlayers = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	bool bIsLAN = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	EGercekServerVisibility Visibility = EGercekServerVisibility::Public;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	FString Password;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	FString SaveSlotName = TEXT("Gercek_HostWorld");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	FString SessionId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	FString MapPath = TEXT("/Game/Istanbul");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	bool bIsContinueSession = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Session")
+	bool bTravelOnCreate = true;
+};
+
+USTRUCT(BlueprintType)
+struct FGercekSessionBrowserResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	FBlueprintSessionResult SessionResult;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	FString HostName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	FString SessionId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	FString SaveSlotName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	int32 CurrentPlayers = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	int32 MaxPlayers = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	int32 PingInMs = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	bool bIsPasswordProtected = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	bool bIsContinueSession = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Session")
+	EGercekServerVisibility Visibility = EGercekServerVisibility::Public;
+};
+
+USTRUCT(BlueprintType)
+struct FGercekSteamFriendInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	FString DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	FString UniqueNetId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	FString StatusText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	bool bIsOnline = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	bool bIsPlayingThisGame = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Steam")
+	bool bIsJoinable = false;
+};
+
+USTRUCT(BlueprintType)
+struct FGercekContinueSessionInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	bool bHasSave = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	bool bWasHost = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	bool bIsContinueSession = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	bool bIsPasswordProtected = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	EGercekServerVisibility Visibility = EGercekServerVisibility::Public;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString SaveSlotName = TEXT("Gercek_HostWorld");
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString SessionId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString MapPath = TEXT("/Game/Istanbul");
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString HostDisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString HostNetId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FString Password;
+};
+
+UCLASS()
+class GERCEK_API UGercekCoopSessionSaveGame : public USaveGame
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY()
+	FGercekContinueSessionInfo SavedSession;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete, bool, bWasSuccessful);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, bool, bWasSuccessful);
-
-// Oda Bulma işlemi hem "Başarılı mı?" bilgisini hem de "Bulunan Odaların Listesini (SearchResults)" döndürür.
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete, bool, bWasSuccessful, const TArray<FBlueprintSessionResult>&, SearchResults);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnServerBrowserResultsUpdated, const TArray<FGercekSessionBrowserResult>&, Results);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnFriendsListUpdated, const TArray<FGercekSteamFriendInfo>&, Friends);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnContinueSaveAvailabilityChanged, bool, bHasAvailableSave, const FGercekContinueSessionInfo&, ContinueInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnOperationMessage, const FString&, Message);
 
-/**
- * Subsystem (Alt Sistem) Nedir?:
- * UGameInstanceSubsystem, oyun açıldığı saniye otomatik olarak doğan ve oyun tamamen kapanana kadar asla ölmeyen (yok olmayan) bir yapıdır.
- * AAA oyunlardaki "Çöpçatanlık" (Matchmaking) servisleri gibi gizli bir hizmetçidir.
- * Level değişse bile ölmez, bu yüzden ağ (network) ve oturum (session) işlemleri için en güvenilir yerdir.
- */
 UCLASS(Blueprintable, BlueprintType)
 class GERCEK_API UMultiplayerSessionSubsystem : public UGameInstanceSubsystem
 {
@@ -30,25 +173,41 @@ class GERCEK_API UMultiplayerSessionSubsystem : public UGameInstanceSubsystem
 public:
 	UMultiplayerSessionSubsystem();
 
-	// Oyunun en başında Subsystem doğarken çalışan hazırlık fonksiyonu
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-	// ODAYI KURAN (Host) İÇİN FONKSİYON
-	// MaxPlayers=4 yaptık, LAN maçını kapattık (bIsLAN = false), yani doğrudan Steam'i hedefler.
 	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
 	void CreateServer(int32 MaxPlayers = 4, bool bIsLAN = false);
 
-	// ODAYI ARAYAN (Client) İÇİN FONKSİYON
-	// MaxSearchResults: Steam'de aynı anda kaç açık oda arayacağımız.
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void CreateServerWithConfig(const FGercekSessionConfig& SessionConfig);
+
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void ContinueLastSession();
+
 	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
 	void FindServer(int32 MaxSearchResults = 10000, bool bIsLAN = false);
 
-	// BULUNAN ODAYA KATILMAK İÇİN FONKSİYON
-	// FindServer işleminin "SearchResults" listesinden seçilen bir odayı buraya takacağız.
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void FindServers(bool bOnlyFriendsSessions, int32 MaxSearchResults = 10000, bool bIsLAN = false);
+
 	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
 	void JoinServer(const FBlueprintSessionResult& SessionResult);
 
-	// Blueprint'te "Bind" (Bağlama) yapıp titreşmesini bekleyeceğimiz Event'ler
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void JoinServerWithPassword(const FBlueprintSessionResult& SessionResult, const FString& Password);
+
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void RequestSteamFriends();
+
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	bool ShowInviteFriendsUI();
+
+	UFUNCTION(BlueprintPure, Category = "Steam Co-Op")
+	bool HasContinueSave() const;
+
+	UFUNCTION(BlueprintPure, Category = "Steam Co-Op")
+	FGercekContinueSessionInfo GetContinueSaveInfo() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
 	FMultiplayerOnCreateSessionComplete OnCreateSessionCompleteEvent;
 
@@ -58,24 +217,50 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
 	FMultiplayerOnJoinSessionComplete OnJoinSessionCompleteEvent;
 
+	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
+	FMultiplayerOnServerBrowserResultsUpdated OnServerBrowserResultsUpdatedEvent;
+
+	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
+	FMultiplayerOnFriendsListUpdated OnFriendsListUpdatedEvent;
+
+	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
+	FMultiplayerOnContinueSaveAvailabilityChanged OnContinueSaveAvailabilityChangedEvent;
+
+	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
+	FMultiplayerOnOperationMessage OnOperationMessageEvent;
+
 protected:
-	// Steam arka planda işi bitirdiğinde C++ tarafında bizi uyaran iç fonksiyonlar
 	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnFindSessionsComplete(bool bWasSuccessful);
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+	void OnReadFriendsListComplete(int32 LocalUserNum, bool bWasSuccessful, const FString& ListName, const FString& ErrorStr);
 
 private:
-	// Pointer (İşaretçi) Nedir?: Pointer (* veya Ptr), evin kendisi değil, evin adresinin yazılı olduğu bir kağıt parçasıdır.
-	// Koca bir Online sistemi hafızada sürekli oradan oraya taşımak yerine, sadece "Adresi şurada" diyerek (Pointer ile) oyunun çok hızlı çalışmasını sağlarız.
-	
-	// Steam Oturum sistemini yöneten ana adres (Pointer)
+	void BroadcastOperationMessage(const FString& Message) const;
+	void BroadcastContinueState() const;
+	void CacheContinueSession(const FGercekContinueSessionInfo& ContinueInfo);
+	void LoadContinueSessionCache();
+	FGercekSessionConfig BuildConfigFromContinueSave() const;
+	FGercekSessionBrowserResult BuildBrowserResult(const FOnlineSessionSearchResult& SearchResult) const;
+	EGercekServerVisibility ResolveVisibility(const FOnlineSessionSettings& SessionSettings) const;
+	bool ValidatePasswordForSession(const FOnlineSessionSearchResult& SearchResult, const FString& Password) const;
+	FString HashPassword(const FString& Password) const;
+	FString GetLocalNetIdString() const;
+	FString GetLocalPlayerNickname() const;
+	void ResetPendingJoinState();
+
 	IOnlineSessionPtr SessionInterface;
-	
-	// Yaptığımız aramanın (Find) detaylarını aklında tutan adres (Pointer)
 	TSharedPtr<class FOnlineSessionSearch> LastSessionSearch;
 
 	bool bCreateSessionAfterDestroy = false;
+	bool bPendingFindFriendsOnly = false;
+	bool bAutoJoinContinueSession = false;
 	int32 PendingMaxPlayers = 4;
 	bool bPendingIsLAN = false;
+	FString PendingContinueSessionId;
+	FGercekSessionConfig PendingSessionConfig;
+	FGercekSessionBrowserResult PendingJoinBrowserResult;
+	FString PendingJoinPassword;
+	FGercekContinueSessionInfo CachedContinueInfo;
 };

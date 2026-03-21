@@ -12,11 +12,25 @@
 static const FSoftObjectPath
     PostApocItemsPath(TEXT("/Game/Gercek/Datas/PostApocItems.PostApocItems"));
 
-static FDataTableRowHandle BuildPostApocHandle(FName RowName) {
-  FDataTableRowHandle Handle;
-  Handle.RowName = RowName;
-  Handle.DataTable =
+static UDataTable *ResolvePostApocItemsDataTable() {
+  static TWeakObjectPtr<UDataTable> CachedDataTable;
+  if (CachedDataTable.IsValid()) {
+    return CachedDataTable.Get();
+  }
+
+  UDataTable *LoadedDataTable =
       TSoftObjectPtr<UDataTable>(PostApocItemsPath).LoadSynchronous();
+  CachedDataTable = LoadedDataTable;
+  return LoadedDataTable;
+}
+
+static FDataTableRowHandle BuildPostApocHandle(
+    const FDataTableRowHandle& SourceHandle) {
+  FDataTableRowHandle Handle;
+  Handle.RowName = SourceHandle.RowName;
+  Handle.DataTable =
+      SourceHandle.DataTable ? SourceHandle.DataTable.Get()
+                             : ResolvePostApocItemsDataTable();
   return Handle;
 }
 
@@ -31,6 +45,7 @@ AItemBase::AItemBase() {
   ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
   ItemMesh->SetCollisionResponseToAllChannels(ECR_Block);
   ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+  ItemMesh->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Block);
   ItemMesh->SetGenerateOverlapEvents(true);
   ItemMesh->SetSimulatePhysics(false);
 }
@@ -42,7 +57,7 @@ void AItemBase::OnConstruction(const FTransform &Transform) {
     return;
   }
 
-  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle);
   if (Handle.IsNull()) {
     return;
   }
@@ -70,10 +85,12 @@ void AItemBase::Interact(AGercekCharacter *Player) {
     return;
   }
 
-  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle);
   UPostApocInventoryComponent *Inventory =
       Player->FindComponentByClass<UPostApocInventoryComponent>();
-  if (IsValid(Inventory) && Inventory->TryAddItem(Handle)) {
+  FGuid AddedInstanceId;
+  if (IsValid(Inventory) &&
+      Inventory->TryAddItem(Handle, AddedInstanceId, ItemCondition)) {
     Destroy();
   }
 }
@@ -82,11 +99,21 @@ void AItemBase::OnInteract_Implementation(AGercekCharacter *Player) {
   Interact(Player);
 }
 
+FText AItemBase::GetInteractionPrompt_Implementation(AGercekCharacter *Player) {
+  const FText ItemName = GetInteractableName_Implementation();
+  if (ItemName.IsEmpty()) {
+    return FText::GetEmpty();
+  }
+
+  return FText::FromString(
+      FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+}
+
 FText AItemBase::GetInteractableName_Implementation() {
   if (ItemRowHandle.RowName.IsNone()) {
     return FText::GetEmpty();
   }
-  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle.RowName);
+  const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle);
   const FItemDBRow *Row =
       Handle.GetRow<FItemDBRow>(TEXT("ItemBase::GetInteractableName"));
   if (!Row || Row->ItemName.IsEmpty()) {
@@ -96,5 +123,6 @@ FText AItemBase::GetInteractableName_Implementation() {
 }
 
 FDataTableRowHandle AItemBase::GetItemData_Implementation() {
-  return BuildPostApocHandle(ItemRowHandle.RowName);
+  return BuildPostApocHandle(ItemRowHandle);
 }
+

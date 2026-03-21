@@ -27,6 +27,7 @@ UENUM(BlueprintType)
 enum class EItemType : uint8 {
   Junk UMETA(DisplayName = "Junk (Hurda)"),
   Food UMETA(DisplayName = "Food (Yiyecek)"),
+  Drink UMETA(DisplayName = "Drink (Icecek)"),
   Med UMETA(DisplayName = "Medical (Tibbi)"),
   Ammo UMETA(DisplayName = "Ammo (Muhimmat)"),
   Weapon UMETA(DisplayName = "Weapon (Silah)"),

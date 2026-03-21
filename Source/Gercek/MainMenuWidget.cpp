@@ -1,299 +1,354 @@
 #include "MainMenuWidget.h"
+
 #include "Components/Button.h"
-#include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
+#include "Components/EditableTextBox.h"
 #include "Components/Image.h"
-#include "Components/ProgressBar.h"
-#include "Components/Slider.h"
 #include "Components/WidgetSwitcher.h"
-#include "GameFramework/GameUserSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "MultiplayerSessionSubsystem.h"
 
-bool UMainMenuWidget::Initialize() {
-  // C++ hiyerarşiyi devralır, herhangi bir isim uyuşmazlığında hayaleti önler.
-  if (!Super::Initialize()) {
-    return false;
-  }
+bool UMainMenuWidget::Initialize()
+{
+	if (!Super::Initialize())
+	{
+		return false;
+	}
 
-  /* ========================================================
-   * BAĞLAMA (BINDING) İŞLEMLERİ
-   * ======================================================== */
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		MultiplayerSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionSubsystem>();
+	}
 
-  // --------- Kanal 0 (Ana Menü / Oyna vb.) ---------
-  if (Button_Play)
-    Button_Play->OnClicked.AddDynamic(this, &UMainMenuWidget::OnPlayClicked);
-  if (Button_Settings)
-    Button_Settings->OnClicked.AddDynamic(this,
-                                          &UMainMenuWidget::OnSettingsClicked);
-  if (Button_Quit)
-    Button_Quit->OnClicked.AddDynamic(this, &UMainMenuWidget::OnQuitClicked);
+	if (Btn_NewGame)
+	{
+		Btn_NewGame->OnClicked.AddDynamic(this, &UMainMenuWidget::OnNewGameClicked);
+	}
+	if (Btn_Continue)
+	{
+		Btn_Continue->OnClicked.AddDynamic(this, &UMainMenuWidget::OnContinueClicked);
+	}
+	if (Btn_Exit)
+	{
+		Btn_Exit->OnClicked.AddDynamic(this, &UMainMenuWidget::OnExitClicked);
+	}
+	if (Btn_JoinServer)
+	{
+		Btn_JoinServer->OnClicked.AddDynamic(this, &UMainMenuWidget::OnJoinServerClicked);
+	}
+	if (Btn_CreateServer)
+	{
+		Btn_CreateServer->OnClicked.AddDynamic(this, &UMainMenuWidget::OnCreateServerClicked);
+	}
+	if (Btn_BackToMain)
+	{
+		Btn_BackToMain->OnClicked.AddDynamic(this, &UMainMenuWidget::OnBackToMainClicked);
+	}
+	if (Btn_Create)
+	{
+		Btn_Create->OnClicked.AddDynamic(this, &UMainMenuWidget::OnCreateClicked);
+	}
+	if (Btn_InviteFriends)
+	{
+		Btn_InviteFriends->OnClicked.AddDynamic(this, &UMainMenuWidget::OnInviteFriendsClicked);
+	}
+	if (Btn_BackToNewGame)
+	{
+		Btn_BackToNewGame->OnClicked.AddDynamic(this, &UMainMenuWidget::OnBackToNewGameClicked);
+	}
 
-  // --------- Kanal 1 (Sunucu Ekranı) ---------
-  if (Button_CreateServer)
-    Button_CreateServer->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnCreateServerClicked);
-  if (Button_JoinServer)
-    Button_JoinServer->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnJoinServerClicked);
-  if (Button_BackFromPlay)
-    Button_BackFromPlay->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnBackFromPlayClicked);
+	if (MultiplayerSubsystem)
+	{
+		MultiplayerSubsystem->OnCreateSessionCompleteEvent.AddDynamic(this, &UMainMenuWidget::HandleCreateSessionComplete);
+		MultiplayerSubsystem->OnJoinSessionCompleteEvent.AddDynamic(this, &UMainMenuWidget::HandleJoinSessionComplete);
+		MultiplayerSubsystem->OnServerBrowserResultsUpdatedEvent.AddDynamic(this, &UMainMenuWidget::HandleServerBrowserResultsUpdated);
+		MultiplayerSubsystem->OnFriendsListUpdatedEvent.AddDynamic(this, &UMainMenuWidget::HandleSteamFriendsUpdated);
+		MultiplayerSubsystem->OnContinueSaveAvailabilityChangedEvent.AddDynamic(this, &UMainMenuWidget::HandleContinueAvailabilityUpdated);
+		MultiplayerSubsystem->OnOperationMessageEvent.AddDynamic(this, &UMainMenuWidget::HandleOperationMessage);
+	}
 
-  // --------- Kanal 2 (Ayarlar Yan Panel) ---------
-  if (BTN_GERCEK_GORUNTU)
-    BTN_GERCEK_GORUNTU->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnBTN_GERCEK_GORUNTU_Clicked);
-  if (BTN_GERCEK_KONTROL)
-    BTN_GERCEK_KONTROL->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnBTN_GERCEK_KONTROL_Clicked);
-  if (BTN_GERCEK_SES)
-    BTN_GERCEK_SES->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnBTN_GERCEK_SES_Clicked);
+	EnsureDefaultServerTypeOptions();
 
-  // Ayarlar Geri Butonu
-  if (Button_BackFromSettings)
-    Button_BackFromSettings->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnBackFromSettingsClicked);
-
-  // --------- Görüntü Ayarları Uygula Butonu ---------
-  if (Button_ApplyVideo)
-    Button_ApplyVideo->OnClicked.AddDynamic(
-        this, &UMainMenuWidget::OnApplyVideoClicked);
-
-  // --------- Ses Ayarları (Slider ve Progress Bar) ---------
-  if (Slider_MasterVolume) {
-    Slider_MasterVolume->OnValueChanged.AddDynamic(
-        this, &UMainMenuWidget::OnMasterVolumeChanged);
-    if (PB_MasterVolume)
-      PB_MasterVolume->SetPercent(Slider_MasterVolume->GetValue());
-  }
-  if (Slider_SFXVolume) {
-    Slider_SFXVolume->OnValueChanged.AddDynamic(
-        this, &UMainMenuWidget::OnSFXVolumeChanged);
-    if (PB_SFXVolume)
-      PB_SFXVolume->SetPercent(Slider_SFXVolume->GetValue());
-  }
-  if (Slider_MusicVolume) {
-    Slider_MusicVolume->OnValueChanged.AddDynamic(
-        this, &UMainMenuWidget::OnMusicVolumeChanged);
-    if (PB_MusicVolume)
-      PB_MusicVolume->SetPercent(Slider_MusicVolume->GetValue());
-  }
-
-  /* ========================================================
-   * MOTOR AYAĞA KALKARKEN STEAM SİSTEMİNİ BUL
-   * ======================================================== */
-  UGameInstance *GameInstance = GetGameInstance();
-  if (GameInstance) {
-    MultiplayerSubsystem =
-        GameInstance->GetSubsystem<UMultiplayerSessionSubsystem>();
-  }
-
-  return true;
+	return true;
 }
 
-/* ========================================================
- * GİRİŞ (INPUT) VE KONTROL ODAK KORUMASI
- * ======================================================== */
+void UMainMenuWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
 
-void UMainMenuWidget::NativeConstruct() {
-  Super::NativeConstruct();
+	SetIsFocusable(true);
+	SetVisibility(ESlateVisibility::Visible);
 
-  // KÖK ÇÖZÜM 1: Widget'ın kendisini Focus (Odak) alabilir hale getiriyoruz.
-  // Blueprint ayarlarında bozulmuş olsa bile C++ bunu ezip zorunlu tutacak.
-  SetIsFocusable(true);
+	if (UWidget* RootWidget = GetRootWidget())
+	{
+		RootWidget->SetVisibility(ESlateVisibility::Visible);
+	}
 
-  // KÖK ÇÖZÜM 2: Ana widget'i, Root'u (Canvas Panel) ve Resmi "Visible" (Sert
-  // Çarpışma) olarak kilitliyoruz. Böylece "boşluklar" dahil hiçbir alan şeffaf
-  // davranıp tıklamayı oyuna geçirmez.
-  SetVisibility(ESlateVisibility::Visible);
+	if (IIMG_Background)
+	{
+		IIMG_Background->SetVisibility(ESlateVisibility::Visible);
+	}
 
-  if (UWidget *RootW = GetRootWidget()) {
-    RootW->SetVisibility(ESlateVisibility::Visible);
-  }
+	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		FInputModeUIOnly InputModeData;
+		InputModeData.SetWidgetToFocus(TakeWidget());
+		InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PlayerController->SetInputMode(InputModeData);
+		PlayerController->SetShowMouseCursor(true);
+	}
 
-  if (IIMG_Background) {
-    IIMG_Background->SetVisibility(ESlateVisibility::Visible);
-  }
+	SetActivePage(MainPageIndex);
 
-  // 1- Widget açılır açılmaz Player Controller'ı bul
-  if (APlayerController *PC = UGameplayStatics::GetPlayerController(this, 0)) {
-    // 2- Giriş modunu tamamen 'Sadece Arayüz' (UI Only) olarak ayarla
-    FInputModeUIOnly InputModeData;
-
-    // Odağı bu widget'ın kendisine kitle
-    InputModeData.SetWidgetToFocus(TakeWidget());
-
-    // Fareyi pencereye kilitleme konusunda esnek ol
-    InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-
-    // 3- Cihaza, hazırladığımız bu kuralları empoze et (Uygula)
-    PC->SetInputMode(InputModeData);
-
-    // 4- Farenin sürekli ekranda görünmesini sağla
-    PC->SetShowMouseCursor(true);
-  }
+	if (MultiplayerSubsystem)
+	{
+		HandleContinueAvailabilityUpdated(MultiplayerSubsystem->HasContinueSave(), MultiplayerSubsystem->GetContinueSaveInfo());
+	}
 }
 
-FReply
-UMainMenuWidget::NativeOnMouseButtonDown(const FGeometry &InGeometry,
-                                         const FPointerEvent &InMouseEvent) {
-  // Tıklamayı yut VE en önemlisi odak noktasını (focus) kendinde tut!
-  // Yoksa Focus motora düşer ve farenin görünürlüğü sıfırlanır.
-  return FReply::Handled().SetUserFocus(TakeWidget(), EFocusCause::Mouse);
+void UMainMenuWidget::NativeDestruct()
+{
+	if (MultiplayerSubsystem)
+	{
+		MultiplayerSubsystem->OnCreateSessionCompleteEvent.RemoveDynamic(this, &UMainMenuWidget::HandleCreateSessionComplete);
+		MultiplayerSubsystem->OnJoinSessionCompleteEvent.RemoveDynamic(this, &UMainMenuWidget::HandleJoinSessionComplete);
+		MultiplayerSubsystem->OnServerBrowserResultsUpdatedEvent.RemoveDynamic(this, &UMainMenuWidget::HandleServerBrowserResultsUpdated);
+		MultiplayerSubsystem->OnFriendsListUpdatedEvent.RemoveDynamic(this, &UMainMenuWidget::HandleSteamFriendsUpdated);
+		MultiplayerSubsystem->OnContinueSaveAvailabilityChangedEvent.RemoveDynamic(this, &UMainMenuWidget::HandleContinueAvailabilityUpdated);
+		MultiplayerSubsystem->OnOperationMessageEvent.RemoveDynamic(this, &UMainMenuWidget::HandleOperationMessage);
+	}
+
+	Super::NativeDestruct();
 }
 
-FReply UMainMenuWidget::NativeOnMouseButtonDoubleClick(
-    const FGeometry &InGeometry, const FPointerEvent &InMouseEvent) {
-  // Çift tıklamaların da yutulmasını ve Focus'un bizde kalmasını garantiye
-  // alıyoruz.
-  return FReply::Handled().SetUserFocus(TakeWidget(), EFocusCause::Mouse);
+FReply UMainMenuWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	return FReply::Handled().SetUserFocus(TakeWidget(), EFocusCause::Mouse);
 }
 
-/* ========================================================
- * ANA SAYFA VE SUNUCU GEÇİŞLERİ (WS_MenuPages)
- * ======================================================== */
-
-void UMainMenuWidget::OnPlayClicked() {
-  // Oynaya basınca kanal 1: Sunucu Seçimi
-  if (WS_MenuPages)
-    WS_MenuPages->SetActiveWidgetIndex(1);
+FReply UMainMenuWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	return FReply::Handled().SetUserFocus(TakeWidget(), EFocusCause::Mouse);
 }
 
-void UMainMenuWidget::OnSettingsClicked() {
-  // Ayarlara basınca kanal 2: Ayarlar Paneli
-  if (WS_MenuPages)
-    WS_MenuPages->SetActiveWidgetIndex(2);
-  // Ayarların ilk açılan detay sayfası (0: Görüntü) olsun.
-  if (WS_AyarDetaylari)
-    WS_AyarDetaylari->SetActiveWidgetIndex(0);
+void UMainMenuWidget::RefreshJoinServerLists()
+{
+	if (!MultiplayerSubsystem)
+	{
+		HandleOperationMessage(TEXT("Steam session sistemi bulunamadi."));
+		return;
+	}
+
+	MultiplayerSubsystem->FindServers(false);
+	MultiplayerSubsystem->RequestSteamFriends();
 }
 
-void UMainMenuWidget::OnQuitClicked() {
-  // Sızıntısız kapatma
-  if (APlayerController *PC = UGameplayStatics::GetPlayerController(this, 0)) {
-    UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, true);
-  }
+void UMainMenuWidget::JoinListedServer(const FGercekSessionBrowserResult& ServerResult, const FString& Password)
+{
+	if (!MultiplayerSubsystem)
+	{
+		HandleOperationMessage(TEXT("Steam session sistemi bulunamadi."));
+		return;
+	}
+
+	MultiplayerSubsystem->JoinServerWithPassword(ServerResult.SessionResult, Password);
 }
 
-// ------ Sunucu Butonları ------
-void UMainMenuWidget::OnCreateServerClicked() {
-  if (GEngine)
-    GEngine->AddOnScreenDebugMessage(
-        -1, 5.f, FColor::Yellow,
-        TEXT("Sunucu Olusturuluyor... Steam Subsystem Devrede!"));
-  if (MultiplayerSubsystem)
-    MultiplayerSubsystem->CreateServer();
+void UMainMenuWidget::OpenInvitePanel()
+{
+	SetActivePage(InviteFriendsPageIndex);
+
+	if (!MultiplayerSubsystem)
+	{
+		HandleOperationMessage(TEXT("Steam session sistemi bulunamadi."));
+		return;
+	}
+
+	MultiplayerSubsystem->RequestSteamFriends();
+
+	if (!MultiplayerSubsystem->ShowInviteFriendsUI())
+	{
+		HandleOperationMessage(TEXT("Davet penceresi acilamadi. Aktif bir Steam oturumu olmasi gerekiyor olabilir."));
+	}
 }
 
-void UMainMenuWidget::OnJoinServerClicked() {
-  if (GEngine)
-    GEngine->AddOnScreenDebugMessage(
-        -1, 5.f, FColor::Yellow,
-        TEXT("Sunucu Araniyor... Steam Subsystem Devrede!"));
-  if (MultiplayerSubsystem)
-    MultiplayerSubsystem->FindServer();
+bool UMainMenuWidget::HasContinueSave() const
+{
+	return MultiplayerSubsystem && MultiplayerSubsystem->HasContinueSave();
 }
 
-void UMainMenuWidget::OnBackFromPlayClicked() {
-  // Sunucudan geriye basılınca Ana Menü (0. Kanal)
-  if (WS_MenuPages)
-    WS_MenuPages->SetActiveWidgetIndex(0);
+FGercekContinueSessionInfo UMainMenuWidget::GetContinueSaveInfo() const
+{
+	return MultiplayerSubsystem ? MultiplayerSubsystem->GetContinueSaveInfo() : FGercekContinueSessionInfo();
 }
 
-/* ========================================================
- * YAN PANEL SEKMELERİ (WS_AyarDetaylari)
- * ======================================================== */
-
-void UMainMenuWidget::OnBTN_GERCEK_GORUNTU_Clicked() {
-  if (WS_AyarDetaylari)
-    WS_AyarDetaylari->SetActiveWidgetIndex(0);
+void UMainMenuWidget::OnNewGameClicked()
+{
+	SetActivePage(NewGamePageIndex);
 }
 
-void UMainMenuWidget::OnBTN_GERCEK_KONTROL_Clicked() {
-  if (WS_AyarDetaylari)
-    WS_AyarDetaylari->SetActiveWidgetIndex(1);
+void UMainMenuWidget::OnContinueClicked()
+{
+	if (!MultiplayerSubsystem)
+	{
+		HandleOperationMessage(TEXT("Continue icin gerekli session sistemi bulunamadi."));
+		return;
+	}
+
+	MultiplayerSubsystem->ContinueLastSession();
 }
 
-void UMainMenuWidget::OnBTN_GERCEK_SES_Clicked() {
-  if (WS_AyarDetaylari)
-    WS_AyarDetaylari->SetActiveWidgetIndex(2);
+void UMainMenuWidget::OnExitClicked()
+{
+	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		UKismetSystemLibrary::QuitGame(this, PlayerController, EQuitPreference::Quit, true);
+	}
 }
 
-void UMainMenuWidget::OnBackFromSettingsClicked() {
-  // Ayarlardan geriye dönerken Kanal 0 (Ana Ekran) atla.
-  if (WS_MenuPages)
-    WS_MenuPages->SetActiveWidgetIndex(0);
+void UMainMenuWidget::OnJoinServerClicked()
+{
+	SetActivePage(JoinServerPageIndex);
+	RefreshJoinServerLists();
 }
 
-/* ========================================================
- * AYARLAR UYGULAMA MERKEZİ
- * ======================================================== */
-
-void UMainMenuWidget::OnApplyVideoClicked() {
-  if (GEngine) {
-    UGameUserSettings *UserSettings = GEngine->GetGameUserSettings();
-    if (UserSettings) {
-      // Kalite - Doku - Skala
-      if (CB_Quality) {
-        int32 QualityIndex = CB_Quality->GetSelectedIndex();
-        UserSettings->SetOverallScalabilityLevel(QualityIndex);
-      }
-
-      // Tam Ekran / Pencere
-      if (CB_WindowMode) {
-        int32 WindowModeIndex = CB_WindowMode->GetSelectedIndex();
-        if (WindowModeIndex == 0) // Tam Ekran
-        {
-          UserSettings->SetFullscreenMode(EWindowMode::Fullscreen);
-        } else if (WindowModeIndex == 1) // Pencereli
-        {
-          UserSettings->SetFullscreenMode(EWindowMode::Windowed);
-        }
-      }
-
-      // VSync (Ekran Dalgalanması Tıklaması)
-      if (Chk_VSync) {
-        UserSettings->SetVSyncEnabled(Chk_VSync->IsChecked());
-      }
-
-      // Motor ayarlarına zorla yazdırır (Hiçbir popup ekranı/15 saniye uyarısı
-      // sormaz!)
-      UserSettings->ApplySettings(false);
-    }
-  }
+void UMainMenuWidget::OnCreateServerClicked()
+{
+	SetActivePage(CreateServerPageIndex);
 }
 
-/* ========================================================
- * SES AYARLARI MERKEZİ (Slider & Progress Bar Eşzamanlaması)
- * ======================================================== */
-
-void UMainMenuWidget::OnMasterVolumeChanged(float Value) {
-  // "float Value" parametresi, oyuncu fare ile slider'ı her kaydırdığında (0.0
-  // ile 1.0 arası) bize gelen eksen değeridir. Progress Bar null mu (yani
-  // silinmiş mi, oyunda yok mu) diye güvenlik kalkanı (Crash yeme engeli)
-  // kuruyoruz.
-  if (PB_MasterVolume) {
-    // İlerleme çubuğunun doluluk oranını (Percent) Slider'dan gelen değere
-    // birebir kopyalayıp eşitliyoruz!
-    PB_MasterVolume->SetPercent(Value);
-  }
+void UMainMenuWidget::OnBackToMainClicked()
+{
+	SetActivePage(MainPageIndex);
 }
 
-void UMainMenuWidget::OnSFXVolumeChanged(float Value) {
-  if (PB_SFXVolume) {
-    // Efekt Slider'ı çekildikçe Efekt Progress bar'ına "Şu anda Slider X
-    // değerinde, sen de kendini o oranda doldur" mesajını veriyoruz.
-    PB_SFXVolume->SetPercent(Value);
-  }
+void UMainMenuWidget::OnCreateClicked()
+{
+	if (!MultiplayerSubsystem)
+	{
+		HandleOperationMessage(TEXT("Sunucu olusturma sistemi bulunamadi."));
+		return;
+	}
+
+	FGercekSessionConfig SessionConfig;
+	SessionConfig.MaxPlayers = 4;
+	SessionConfig.bIsLAN = false;
+	SessionConfig.Visibility = ResolveSelectedServerVisibility();
+	SessionConfig.MapPath = TEXT("/Game/Istanbul");
+	SessionConfig.bTravelOnCreate = true;
+
+	if (InputPassword)
+	{
+		SessionConfig.Password = InputPassword->GetText().ToString().TrimStartAndEnd();
+	}
+
+	MultiplayerSubsystem->CreateServerWithConfig(SessionConfig);
 }
 
-void UMainMenuWidget::OnMusicVolumeChanged(float Value) {
-  if (PB_MusicVolume) {
-    // Müzik Slider'ı hareket ettirildikçe ilgili eşi benzeri ProgressBar da o
-    // oranda kendini günceller.
-    PB_MusicVolume->SetPercent(Value);
-  }
+void UMainMenuWidget::OnInviteFriendsClicked()
+{
+	OpenInvitePanel();
+}
+
+void UMainMenuWidget::OnBackToNewGameClicked()
+{
+	SetActivePage(NewGamePageIndex);
+}
+
+void UMainMenuWidget::HandleCreateSessionComplete(bool bWasSuccessful)
+{
+	if (!bWasSuccessful)
+	{
+		HandleOperationMessage(TEXT("Sunucu olusturulamadi."));
+	}
+}
+
+void UMainMenuWidget::HandleJoinSessionComplete(bool bWasSuccessful)
+{
+	if (!bWasSuccessful)
+	{
+		HandleOperationMessage(TEXT("Sunucuya katilma islemi basarisiz oldu."));
+	}
+}
+
+void UMainMenuWidget::HandleServerBrowserResultsUpdated(const TArray<FGercekSessionBrowserResult>& Results)
+{
+	BP_OnServerBrowserResultsUpdated(Results);
+}
+
+void UMainMenuWidget::HandleSteamFriendsUpdated(const TArray<FGercekSteamFriendInfo>& Friends)
+{
+	BP_OnSteamFriendsUpdated(Friends);
+}
+
+void UMainMenuWidget::HandleContinueAvailabilityUpdated(bool bHasAvailableSave, const FGercekContinueSessionInfo& ContinueInfo)
+{
+	BP_OnContinueAvailabilityUpdated(bHasAvailableSave, ContinueInfo);
+}
+
+void UMainMenuWidget::HandleOperationMessage(const FString& Message)
+{
+	BP_OnMenuStatusMessage(Message);
+}
+
+UWidgetSwitcher* UMainMenuWidget::ResolveMenuSwitcher() const
+{
+	if (WS_MenuPages)
+	{
+		return WS_MenuPages;
+	}
+
+	if (WS_MainMenu)
+	{
+		return WS_MainMenu;
+	}
+
+	return WidgetSwitcher_MainMenu;
+}
+
+void UMainMenuWidget::SetActivePage(int32 PageIndex) const
+{
+	if (UWidgetSwitcher* MenuSwitcher = ResolveMenuSwitcher())
+	{
+		MenuSwitcher->SetActiveWidgetIndex(PageIndex);
+	}
+}
+
+EGercekServerVisibility UMainMenuWidget::ResolveSelectedServerVisibility() const
+{
+	if (!ServerType)
+	{
+		return EGercekServerVisibility::Public;
+	}
+
+	const FString SelectedValue = ServerType->GetSelectedOption().TrimStartAndEnd();
+
+	if (SelectedValue.Equals(TEXT("FriendsOnly"), ESearchCase::IgnoreCase) ||
+		SelectedValue.Equals(TEXT("Friends Only"), ESearchCase::IgnoreCase) ||
+		SelectedValue.Equals(TEXT("Arkadaslar"), ESearchCase::IgnoreCase) ||
+		SelectedValue.Equals(TEXT("Sadece Arkadaslar"), ESearchCase::IgnoreCase))
+	{
+		return EGercekServerVisibility::FriendsOnly;
+	}
+
+	if (SelectedValue.Equals(TEXT("Private"), ESearchCase::IgnoreCase) ||
+		SelectedValue.Equals(TEXT("Ozel"), ESearchCase::IgnoreCase))
+	{
+		return EGercekServerVisibility::Private;
+	}
+
+	return EGercekServerVisibility::Public;
+}
+
+void UMainMenuWidget::EnsureDefaultServerTypeOptions()
+{
+	if (!ServerType || ServerType->GetOptionCount() > 0)
+	{
+		return;
+	}
+
+	ServerType->AddOption(TEXT("Public"));
+	ServerType->AddOption(TEXT("FriendsOnly"));
+	ServerType->AddOption(TEXT("Private"));
+	ServerType->SetSelectedIndex(0);
 }

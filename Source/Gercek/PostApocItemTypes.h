@@ -26,6 +26,31 @@ enum class EPostApocItemCategory : uint8 {
   Valuable UMETA(DisplayName = "Valuable")
 };
 
+UENUM(BlueprintType)
+enum class EPostApocConsumableEffectType : uint8 {
+  None UMETA(DisplayName = "None"),
+  Food UMETA(DisplayName = "Food"),
+  Drink UMETA(DisplayName = "Drink"),
+  Heal UMETA(DisplayName = "Heal"),
+  AntiRad UMETA(DisplayName = "Anti-Rad")
+};
+
+UENUM(BlueprintType)
+enum class EConsumableFillState : uint8 {
+  NotApplicable UMETA(DisplayName = "Not Applicable"),
+  HalfFull UMETA(DisplayName = "Half Full"),
+  Full UMETA(DisplayName = "Full")
+};
+
+UENUM(BlueprintType)
+enum class EConsumableLootFillRule : uint8 {
+  None UMETA(DisplayName = "None"),
+  StandardWorldLoot UMETA(DisplayName = "Standard World Loot"),
+  SpecialZoneLoot UMETA(DisplayName = "Special Zone Loot"),
+  AlwaysHalfFull UMETA(DisplayName = "Always Half Full"),
+  AlwaysFull UMETA(DisplayName = "Always Full")
+};
+
 /**
  * ETradeKnowledge
  * Oyuncunun ticaret tecrübe seviyesini temsil eder. (Novice, Apprentice, Expert)
@@ -88,6 +113,14 @@ public:
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags")
   bool bQuestItem = false;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Consumable")
+  EPostApocConsumableEffectType ConsumeEffectType =
+      EPostApocConsumableEffectType::None;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Consumable",
+            meta = (ClampMin = "0.0"))
+  float ConsumeAmount = 0.0f;
 
   // ---- Grid (Inventory) Alanları ----------------------------------------
 

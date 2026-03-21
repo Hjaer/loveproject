@@ -21,6 +21,7 @@ AWorldItemActor::AWorldItemActor() {
   MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
   MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
   MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+  MeshComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Block);
   MeshComponent->SetGenerateOverlapEvents(true);
   MeshComponent->SetSimulatePhysics(true);
 }
@@ -67,7 +68,9 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
   }
 
   // Grid tabanlı ekleme: yer varsa sahneyi temizle, yoksa uyar.
-  if (Inventory->TryAddItem(ItemRowHandle)) {
+  FGuid AddedInstanceId;
+  if (Inventory->TryAddItem(ItemRowHandle, AddedInstanceId, ItemCondition,
+                            ItemFillState)) {
     Destroy();
   } else {
     UE_LOG(LogTemp, Warning,
@@ -81,6 +84,17 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
 // IInteractable — Return the display name for the interaction prompt.
 // Geçerliyse "[E] ItemName", geçersizse boş FText döner.
 // ---------------------------------------------------------------------------
+
+FText AWorldItemActor::GetInteractionPrompt_Implementation(
+    AGercekCharacter *Player) {
+  const FText ItemName = GetInteractableName_Implementation();
+  if (ItemName.IsEmpty()) {
+    return FText::GetEmpty();
+  }
+
+  return FText::FromString(
+      FString::Printf(TEXT("E - Al %s"), *ItemName.ToString()));
+}
 FText AWorldItemActor::GetInteractableName_Implementation() {
   const FItemDBRow *Row = ResolveRow(ItemRowHandle);
   if (!Row || Row->ItemName.IsEmpty()) {
@@ -103,8 +117,12 @@ FDataTableRowHandle AWorldItemActor::GetItemData_Implementation() {
 // ---------------------------------------------------------------------------
 // Initialize Item Data when spawned via Drop (Çantadan atılma durumunda)
 // ---------------------------------------------------------------------------
-void AWorldItemActor::InitializeItemData(const FDataTableRowHandle& InHandle) {
+void AWorldItemActor::InitializeItemData(const FDataTableRowHandle& InHandle,
+                                         const int32 InCondition,
+                                         const EConsumableFillState InFillState) {
   ItemRowHandle = InHandle;
+  ItemCondition = FMath::Clamp(InCondition, 10, 100);
+  ItemFillState = InFillState;
 
   const FItemDBRow *Row = ResolveRow(ItemRowHandle);
   if (!Row) return;

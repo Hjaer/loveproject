@@ -1,102 +1,98 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿#pragma once
 
-#pragma once
-
-// --- Standard Unreal includes first ---
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "UObject/Interface.h"
 
-// FItemDBRow ve FPostApocItemRow tanımları buradan geliyor.
 #include "ItemTypes.h"
 #include "PostApocItemTypes.h"
 
-// --- GENERATED HEADER: MUST BE THE LAST INCLUDE. NON-NEGOTIABLE. ---
-// clang-format off
 #include "PostApocInventoryTypes.generated.h"
-// clang-format on
 
-// ============================================================
-//  ARAYÜZ: IInventoryInterface
-//  Widget-C++ köprüsü. Widget'lar Cast<IInventoryInterface>
-//  ile bunu uygulayan herhangi bir Actor'a erişebilir.
-// ============================================================
+class UUserWidget;
 
 UINTERFACE(MinimalAPI, BlueprintType)
 class UInventoryInterface : public UInterface {
   GENERATED_BODY()
 };
 
-/**
- * IInventoryInterface
- *
- * Widget'lar ile C++ kodunun haberleştiği sözleşme.
- * Arayüzü uygulamak isteyen her Actor, bu fonksiyonları
- * Blueprint veya C++ tarafında override etmelidir.
- */
 class GERCEK_API IInventoryInterface {
   GENERATED_BODY()
 
 public:
-  /**
-   * GetItemDetails
-   *
-   * Verilen ItemID'ye karşılık gelen satır verisini ve kondisyonu döndürür.
-   * @param ItemID       - Sorgulanacak eşyanın Row adı.
-   * @param OutItemData  - Doldurulacak FItemDBRow verisi.
-   * @param OutCondition - 0.0-1.0 arası kondisyon değeri.
-   */
   UFUNCTION(BlueprintCallable, BlueprintNativeEvent,
             Category = "PostApoc Inventory")
   void GetItemDetails(FName ItemID, FItemDBRow &OutItemData,
                       float &OutCondition);
 
-  /**
-   * MoveItem
-   *
-   * Bir eşyayı envanter içinde OldIndex'ten NewIndex'e taşır.
-   * @return true başarılıysa, false çakışma/sınır dışı durumunda.
-   */
   UFUNCTION(BlueprintCallable, BlueprintNativeEvent,
             Category = "PostApoc Inventory")
   bool MoveItem(int32 OldIndex, int32 NewIndex);
 
-  /**
-   * DropItem
-   *
-   * Eşyayı envanterdeki referansıyla dünyaya bırakır.
-   * @param ItemID    - Bırakılacak eşyanın Row adı.
-   * @param Condition - Eşyanın mevcut kondisyonu (0.0-1.0).
-   */
   UFUNCTION(BlueprintCallable, BlueprintNativeEvent,
             Category = "PostApoc Inventory")
   void DropItem(FName ItemID, float Condition);
 };
 
-// ============================================================
-//  COMPONENT: UInventoryComponent (Izgara tabanlı)
-//  Mevcut UInventoryComponent'ten ayrı, grid-aware bileşen.
-//  Aktöre eklenerek 2-boyutlu ızgara mantığını yönetir.
-// ============================================================
-
-// Delegate to notify UI of grid changes
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGridUpdatedDelegate);
 
-// Ağ (Network) üzerinden replike edilebilir Izgara Hücresi verisi
 USTRUCT(BlueprintType)
 struct FGridSlotData {
-    GENERATED_BODY()
+  GENERATED_BODY()
 
-    UPROPERTY()
-    FIntPoint Location;
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FIntPoint Location = FIntPoint::ZeroValue;
 
-    UPROPERTY()
-    FName ItemID;
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FGuid ItemInstanceId;
 
-    bool operator==(const FGridSlotData& Other) const {
-        return Location == Other.Location && ItemID == Other.ItemID;
-    }
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FName ItemRowName = NAME_None;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  bool bIsRotated = false;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  int32 Condition = 100;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  EConsumableFillState FillState = EConsumableFillState::NotApplicable;
+
+  bool operator==(const FGridSlotData& Other) const {
+    return Location == Other.Location &&
+           ItemInstanceId == Other.ItemInstanceId &&
+           ItemRowName == Other.ItemRowName &&
+           bIsRotated == Other.bIsRotated &&
+           Condition == Other.Condition &&
+           FillState == Other.FillState;
+  }
+};
+
+USTRUCT(BlueprintType)
+struct FGridItemInstanceView {
+  GENERATED_BODY()
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FGuid ItemInstanceId;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FDataTableRowHandle ItemHandle;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FIntPoint TopLeft = FIntPoint::ZeroValue;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  FIntPoint ItemSize = FIntPoint(1, 1);
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  bool bIsRotated = false;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  int32 Condition = 100;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostApoc Inventory")
+  EConsumableFillState FillState = EConsumableFillState::NotApplicable;
 };
 
 UCLASS(ClassGroup = (PostApoc), meta = (BlueprintSpawnableComponent))
@@ -106,175 +102,97 @@ class GERCEK_API UPostApocInventoryComponent : public UActorComponent {
 public:
   UPostApocInventoryComponent();
 
-public:
   virtual void BeginPlay() override;
+  virtual void GetLifetimeReplicatedProps(
+      TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-  // Izgaranın sütun sayısı. Blueprint'ten düzenlenebilir.
   UPROPERTY(EditAnywhere, BlueprintReadWrite,
             Category = "PostApoc Inventory | Grid")
   int32 GridColumns = 10;
 
-  // Izgaranın satır sayısı. Blueprint'ten düzenlenebilir.
   UPROPERTY(EditAnywhere, BlueprintReadWrite,
             Category = "PostApoc Inventory | Grid")
   int32 GridRows = 10;
 
-  // Hücre boyutu (Piksel). Varsayılan 50x50.
   UPROPERTY(EditAnywhere, BlueprintReadWrite,
             Category = "PostApoc Inventory | Grid")
   float TileSize = 50.0f;
 
-  // Izgarada yaratılacak olan eşya widget sınıfı (WBP_GridItem vb.)
   UPROPERTY(EditAnywhere, BlueprintReadWrite,
             Category = "PostApoc Inventory | Grid")
   TSubclassOf<class UUserWidget> GridItemWidgetClass;
 
-  // Tüm eşya verilerinin çekileceği ana tablo
   UPROPERTY(EditAnywhere, BlueprintReadWrite,
             Category = "PostApoc Inventory | Grid")
-  class UDataTable* ItemDataTable;
+  class UDataTable* ItemDataTable = nullptr;
 
-  /**
-   * OccupiedSlotsArray
-   *
-   * Replikasyona uyumlu, oyuncuların grid (ızgara) slotlarındaki eşya
-   * konumlarını tutan dizi.
-   */
   UPROPERTY(ReplicatedUsing = OnRep_GridUpdated)
   TArray<FGridSlotData> OccupiedSlotsArray;
 
-  /**
-   * Izgara güncellendiğinde UI'yi tetiklemek için Delegate
-   */
   UPROPERTY(BlueprintAssignable, Category = "PostApoc Inventory | Events")
   FOnGridUpdatedDelegate OnGridUpdated;
 
-  /**
-   * Sunucudan OccupiedSlotsArray güncellendiğinde istemcilerde (client) çalışır.
-   */
   UFUNCTION()
   void OnRep_GridUpdated();
 
-public:
-  /**
-   * TryAddItem
-   *
-   * Eşyayı ızgarada uygun bir yere yerleştirmeyi dener.
-   * @param ItemRowHandle - Eklenecek eşyanın DataTable satır referansı.
-   * @return true yerleştirme başarılıysa, false alan yoksa.
-   */
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool TryAddItem(FDataTableRowHandle ItemRowHandle);
 
-  /**
-   * RemoveItemFromGrid
-   *
-   * Izgara üzerindeki belirtilen satır adına (RowName) ait tüm hücre
-   * kayıtlarını OccupiedSlots'tan siler.
-   * @param ItemRowName - Kaldırılacak eşyanın DataTable satır adı.
-   * @return true en az bir hücre silindiyse, false eşya ızgararada yoksa.
-   */
+  bool TryAddItem(FDataTableRowHandle ItemRowHandle, FGuid& OutItemInstanceId,
+                  int32 ItemCondition = 100,
+                  EConsumableFillState FillState =
+                      EConsumableFillState::NotApplicable);
+
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool RemoveItemFromGrid(FName ItemRowName);
 
-  /**
-   * GetItemCountInGrid
-   *
-   * Izgara üzerinde belirtilen RowName'e ait kaç hücre işgal edildiğini
-   * döndürür. UI'da eşya sayımı, debug ve kontroller için kullanılır.
-   * @param ItemRowName - Sorgulanacak eşyanın satır adı.
-   * @return O eşyaya ait dolu hücre sayısı (0 ise ızgararada yok).
-   */
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
+  bool RemoveItemByInstanceId(FGuid ItemInstanceId);
+
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Grid")
   int32 GetItemCountInGrid(FName ItemRowName) const;
 
-  /**
-   * FindEmptySpace
-   *
-   * Eşyanın boyutuna göre çantada (döndürülmüş veya normal) boş bir alan arar.
-   * @param ItemSize          - Eşyanın (Genişlik, Yükseklik) hücre boyutu.
-   * @param bCheckRotated     - true ise 90° döndürülmüş boyut da kontrol
-   * edilir.
-   * @param OutFoundLocation  - Başarılıysa bulunan sol-üst köşe koordinatı.
-   * @return true uygun alan bulunduysa, false bulunamadıysa.
-   */
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool FindFirstItemInstanceByRowName(FName ItemRowName,
+                                      FGuid& OutItemInstanceId) const;
+
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool FindEmptySpace(FIntPoint ItemSize, bool bCheckRotated,
                       FIntPoint &OutFoundLocation) const;
 
-  /**
-   * CalculateBarterValue
-   *
-   * Eşyanın kondisyona bağlı gerçek takas değerini hesaplar.
-   * Formül: InBaseValue * (InCondition * ConditionWeight)
-   *
-   * @param InBaseValue      - FItemDBRow::BaseValue alanı.
-   * @param InCondition      - 0.0 (kırık) – 1.0 (sıfır kusur).
-   * @param ConditionWeight  - Kondisyonun ağırlık çarpanı (varsayılan 1.0).
-   * @return Hesaplanan takas değeri.
-   */
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Economy")
   float CalculateBarterValue(float InBaseValue, float InCondition,
                              float ConditionWeight = 1.0f) const;
 
-  /**
-   * CheckSpace
-   *
-   * Belirtilen sol-üst köşeden başlayarak ItemSize kadar alan müsait mi?
-   * bIsRotated = true ise X ve Y eksenleri yer değiştirilir (ItemSize.X <->
-   * ItemSize.Y).
-   *
-   * @param TopLeftIndex - Kontrol edilecek sol-üst hücre koordinatı.
-   * @param ItemSize     - Eşyanın (Genişlik, Yükseklik) boyutu.
-   * @param bIsRotated   - true ise boyutlar döndürülmüş kabul edilir.
-   * @return true alan müsaitse, false değilse.
-   */
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Economy")
+  int32 CalculateItemValue(int32 BaseValue, int32 ItemCondition) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Economy")
+  int32 CalculateItemValueForRow(const FPostApocItemRow& ItemData,
+                                 int32 ItemCondition,
+                                 EConsumableFillState FillState) const;
+
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool CheckSpace(FIntPoint TopLeftIndex, FIntPoint ItemSize,
                   bool bIsRotated) const;
 
-  // -------------------------------------------------------
-  /**
-   * ExecuteTrade
-   *
-   * Oyuncu ile tüccar arasında Takas (Barter) gerçekleştirir.
-   *
-   * Akış:
-   *   1. Oyuncunun teklif ettiği eşyaların tamamının envanterde
-   *      mevcut olup olmadığını doğrular.
-   *   2. Tüccarın teklif ettiği eşyalar için yeterli ızgara alanı
-   *      bulunup bulunmadığını kontrol eder.
-   *   3. Her iki koşul da sağlanıyorsa; oyuncu eşyalarını envanterden
-   *      kaldırır, tüccar eşyalarını ekler ve takas tamamlanır.
-   *
-   * @param PlayerOfferItems  - Oyuncunun vereceği eşyaların DataTable satır referansları.
-   * @param TraderOfferItems  - Oyuncunun alacağı eşyaların DataTable satır referansları.
-   */
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Grid")
   float GetInventoryValue() const;
 
-  /**
-   * NativeRefreshUI
-   *
-   * Verilen GridWidget içindeki "GridCanvas" (CanvasPanel) bileşenini bulur,
-   * içini temizler ve OccupiedSlots içindeki eşyaları C++ üzerinden yaratıp dizer.
-   * Meryem'in Blueprint döngülerine olan ihtiyacı tamamen ortadan kaldırır.
-   */
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   void NativeRefreshUI(UUserWidget* GridWidget);
 
-  /**
-   * HandleItemDrop
-   *
-   * Sürükle-bırak işlemi bittiğinde eşyayı yeni koordinatlarına yerleştirmeyi dener.
-   */
   UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
   bool HandleItemDrop(FName ItemRowName, FIntPoint NewLocation);
 
-  // --- Grid Erişim Yardımcıları ---
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Grid")
+  bool HandleItemDropByInstanceId(FGuid ItemInstanceId, FIntPoint NewLocation);
 
   UFUNCTION(BlueprintCallable, BlueprintPure,
             Category = "PostApoc Inventory | Grid")
@@ -288,6 +206,67 @@ public:
             Category = "PostApoc Inventory | Grid")
   TMap<FIntPoint, FName> GetOccupiedSlots() const;
 
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  TMap<FIntPoint, FGuid> GetOccupiedSlotInstances() const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  TArray<FGridItemInstanceView> GetItemInstances() const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool GetItemInstanceView(FGuid ItemInstanceId,
+                           FGridItemInstanceView& OutInstance) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool GetItemHandleForInstance(FGuid ItemInstanceId,
+                                FDataTableRowHandle& OutItemHandle) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool GetConditionForInstance(FGuid ItemInstanceId, int32& OutCondition) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool GetFillStateForInstance(FGuid ItemInstanceId,
+                               EConsumableFillState& OutFillState) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Grid")
+  bool GetItemDisplayStateForInstance(FGuid ItemInstanceId,
+                                      FText& OutStateText) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Economy")
+  int32 GetItemValueForInstance(FGuid ItemInstanceId) const;
+
+  UFUNCTION(BlueprintCallable, BlueprintPure,
+            Category = "PostApoc Inventory | Economy")
+  int32 GetTotalValueForInstances(const TArray<FGuid>& ItemInstanceIds) const;
+
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Save")
+  void ExportSaveData(TArray<FGridSlotData>& OutSlots, FString& OutDataTablePath) const;
+
+  UFUNCTION(BlueprintCallable, Category = "PostApoc Inventory | Save")
+  void ImportSaveData(const TArray<FGridSlotData>& InSlots, class UDataTable* InDataTable);
+
 private:
+  bool CheckSpaceInternal(FIntPoint TopLeftIndex, FIntPoint ItemSize,
+                          bool bIsRotated, const FGuid* IgnoredInstanceId) const;
+  bool PlaceItemInstanceAt(FDataTableRowHandle ItemRowHandle, const FGuid& ItemInstanceId,
+                           FIntPoint TopLeftIndex, bool bIsRotated,
+                           int32 ItemCondition,
+                           EConsumableFillState FillState);
+  bool GetItemPlacement(FGuid ItemInstanceId, FGridItemInstanceView& OutInstance) const;
+  EConsumableFillState NormalizeFillStateForItem(
+      const FPostApocItemRow& ItemData,
+      EConsumableFillState RequestedFillState) const;
+  bool UsesBinaryFillState(const FPostApocItemRow& ItemData) const;
+  FText GetDisplayStateText(const FPostApocItemRow& ItemData,
+                            int32 ItemCondition,
+                            EConsumableFillState FillState) const;
+  void MigrateLegacySlots();
   void BroadcastGridChanged();
 };

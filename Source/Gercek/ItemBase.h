@@ -49,6 +49,10 @@ public:
             meta = (ClampMin = "0.0"))
   float HeavyWeightThreshold = 5.0f;
 
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item | Data",
+            meta = (ClampMin = "10", ClampMax = "100"))
+  int32 ItemCondition = 100;
+
   // ---------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------
@@ -57,6 +61,7 @@ public:
 
   // === IInteractable (BlueprintNativeEvent → _Implementation) ===
   virtual void OnInteract_Implementation(AGercekCharacter *Player) override;
+  virtual FText GetInteractionPrompt_Implementation(AGercekCharacter *Player) override;
   virtual FText GetInteractableName_Implementation() override;
   virtual FDataTableRowHandle GetItemData_Implementation() override;
 };

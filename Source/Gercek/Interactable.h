@@ -31,6 +31,9 @@ public:
   void OnInteract(class AGercekCharacter *Player);
 
   UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+  FText GetInteractionPrompt(class AGercekCharacter *Player);
+
+  UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
   FText GetInteractableName();
 
   UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")

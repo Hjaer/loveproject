@@ -1,113 +1,180 @@
-# Gercek Project Status
+﻿# Gercek Project Status
 
-Bu dosya, projenin 20 Mart 2026 tarihli mevcut teknik durumunu referans almak icin hazirlandi.
-Amac, bundan sonraki oyun gelistirmelerinde ortak bir "neredeyiz / sonra ne yapacagiz" zemini saglamaktir.
+Bu dosya, 21 Mart 2026 itibariyla projenin guncel teknik durumunu ozetler.
+Bugunku guncelleme ile birlikte proje artik host-authoritative save/load, instance-id tabanli grid envanter, condition/value ekonomisi, yarim dolu/tam dolu yiyecek ekonomisi, server-guvenli etkileşim ve Steam co-op session omurgasina sahiptir.
 
-## 1. Mimari Sema
+## 1. Guncel Mimari
 
 ```mermaid
 flowchart TD
-    A["BP_GercekGameMode"] --> B["AGercekCharacter"]
-    B --> C["UInventoryComponent"]
-    B --> D["IInteractable"]
-    D --> E["AItemBase / AWorldItemActor"]
-    B --> F["TradeComponent"]
+    GM["AGercekGameMode"] --> SAVE["UGercekHostSaveGame"]
+    GM --> CHAR["AGercekCharacter"]
+    CHAR --> GRID["UPostApocInventoryComponent"]
+    CHAR --> TRADE["UTradeComponent"]
+    CHAR --> INT["IInteractable + ServerInteract"]
 
-    G["MainMenuWidget"] --> H["MultiplayerSessionSubsystem"]
-    G --> I["AudioSettingsSubsystem"]
+    INT --> PICKUP["APickupBase / AItemBase / AWorldItemActor"]
+    INT --> CONTAINER["ALootContainerBase"]
+    INT --> MERCHANT["AMerchantBase"]
 
-    J["MerchantBase"] --> K["UPostApocInventoryComponent"]
-    K --> L["UPostApocGridItem"]
-    K --> M["PostApocItem DataTable"]
+    GRID --> GRIDUI["UPostApocInventoryGridWidget"]
+    GRIDUI --> ITEM["UPostApocGridItem"]
+    CHAR --> TRADEUI["Trade Screen + Offer Panels"]
+    TRADEUI --> OFFER["UPostApocTradeOfferPanelWidget"]
 
-    C --> N["Klasik liste/stok envanteri"]
-    K --> O["Grid tabanli envanter"]
+    MENU["UMainMenuWidget"] --> SESSION["UMultiplayerSessionSubsystem"]
+    MENU --> AUDIO["UAudioSettingsSubsystem"]
+    SESSION --> STEAM["Steam Session / Friends / Invite"]
 ```
 
-## 2. Sistem Durumu
+## 2. Temel Sistemler
 
-### Tamamlanan veya kullanilabilir durumda olan sistemler
+### Karakter ve oynanis omurgasi
+- Ana karakter sinifi `AGercekCharacter`.
+- Survival ozellikleri: `Health`, `Hunger`, `Thirst`, `Stamina`, `Radiation`.
+- Trade progression: `TradeXP`, `CurrentKnowledge`.
+- Local-only interaction trace timer ve server re-check ile guvenli etkileşim.
+- Inventory, loot container ve trade UI acma/kapama akislari karakter ustunden yonetiliyor.
 
-- Karakter hareketi, stamina, hunger, thirst ve interaction akisi mevcut.
-  Referans: [GercekCharacter.h](C:\GercekProje\Gercek\Source\Gercek\GercekCharacter.h), [GercekCharacter.cpp](C:\GercekProje\Gercek\Source\Gercek\GercekCharacter.cpp)
-- Dunyadaki item'i alip klasik envantere ekleme akisi mevcut.
-  Referans: [ItemBase.cpp](C:\GercekProje\Gercek\Source\Gercek\ItemBase.cpp), [WorldItemActor.cpp](C:\GercekProje\Gercek\Source\Gercek\WorldItemActor.cpp)
-- Klasik agirlik bazli envanter ve agirlik degisim event'i mevcut.
-  Referans: [InventoryComponent.h](C:\GercekProje\Gercek\Source\Gercek\InventoryComponent.h), [InventoryComponent.cpp](C:\GercekProje\Gercek\Source\Gercek\InventoryComponent.cpp)
-- Temel alis/satis ve para mantigi mevcut.
-  Referans: [TradeComponent.h](C:\GercekProje\Gercek\Source\Gercek\TradeComponent.h), [TradeComponent.cpp](C:\GercekProje\Gercek\Source\Gercek\TradeComponent.cpp)
-- Ana menu sayfa gecisleri, video ayarlari ve buton baglamalari mevcut.
-  Referans: [MainMenuWidget.cpp](C:\GercekProje\Gercek\Source\Gercek\MainMenuWidget.cpp)
-- Ses ayarlari save/load sistemi ve engine override akisi mevcut.
-  Referans: [AudioSettingsSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\AudioSettingsSubsystem.cpp:44), [AudioSettingsSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\AudioSettingsSubsystem.cpp:116)
-- Steam session tabanli host, ara, katil akisi mevcut.
-  Referans: [MultiplayerSessionSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\MultiplayerSessionSubsystem.cpp:53), [MultiplayerSessionSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\MultiplayerSessionSubsystem.cpp:104), [MultiplayerSessionSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\MultiplayerSessionSubsystem.cpp:147)
-- Grid tabanli yeni envanterin temel veri modeli ve UI refresh mantigi mevcut.
-  Referans: [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:105), [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:284)
-- Tuccar karakteri kendi grid envanterini baslangicta doldurabiliyor.
-  Referans: [MerchantBase.cpp](C:\GercekProje\Gercek\Source\Gercek\MerchantBase.cpp)
+### Etkilesim sistemi
+- Tick tabanli degil, `0.1s` timer tabanli local trace kullaniyor.
+- Proje-ozel `Interactable` trace kanali aktif.
+- Gercek eylem `ServerInteract()` ve server-side line trace ile dogrulaniyor.
+- `IInteractable` arayuzu sayesinde karakter hedef aktoru cast etmiyor.
 
-### Yari veya riskli durumda olan sistemler
+### Grid envanter sistemi
+- Ana oyuncu envanteri `UPostApocInventoryComponent`.
+- Her item artik `FGuid ItemInstanceId` ile tekil kimlige sahip.
+- Grid slot verisi: `Location`, `ItemInstanceId`, `ItemRowName`, `bIsRotated`, `Condition`.
+- UI item renderi benzersiz instance listesi ustunden yapiliyor.
+- Drag-drop, use, drop, loot transfer ve trade secimi instance-id ile calisiyor.
+- Eski row-name tabanli API'ler yalnizca uyumluluk katmani olarak tutuluyor.
 
-- Projede iki envanter mimarisi ayni anda yasiyor.
-  Klasik akista `UInventoryComponent`, yeni akista `UPostApocInventoryComponent` kullaniliyor. Bu iki sistem henuz tek bir oyuncu akisinda birlestirilmis degil.
-- Ana menu ses slider'lari su an sadece progress bar guncelliyor.
-  `MainMenuWidget` icindeki `OnMasterVolumeChanged`, `OnSFXVolumeChanged`, `OnMusicVolumeChanged` fonksiyonlari `AudioSettingsSubsystem` cagrisi yapmiyor.
-  Referans: [MainMenuWidget.cpp](C:\GercekProje\Gercek\Source\Gercek\MainMenuWidget.cpp:273)
-- Session host akisi hala `FirstPerson` haritasina travel ediyor.
-  Varsayilan map `Istanbul`, ama host olunca `ServerTravel("/Game/FirstPerson/Lvl_FirstPerson?listen")` cagriliyor.
-  Referans: [DefaultEngine.ini](C:\GercekProje\Gercek\Config\DefaultEngine.ini:69), [MultiplayerSessionSubsystem.cpp](C:\GercekProje\Gercek\Source\Gercek\MultiplayerSessionSubsystem.cpp:77)
-- Grid envanter item kimligi satir adi bazli tutuluyor.
-  `OccupiedSlotsArray` icinde sadece `ItemID(RowName)` saklandigi icin ayni itemden birden fazla bagimsiz kopya oldugunda instance bazli ayristirma zayif.
-  Referans: [PostApocInventoryTypes.h](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.h), [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:153)
-- `GetInventoryValue()` ayni `RowName` icin tek sefer sayim yapiyor.
-  Bu, ayni itemden iki ayri adet varsa toplam degerin eksik hesaplanmasi riskini dogurur.
-  Referans: [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:261)
-- `HandleItemDrop()` kismi olarak koordinatli drop yapiyor, ama fallback yine `TryAddItem()` ile "ilk uygun yere" yerlestirme mantigina donuyor.
-  Bu yuzden surukle-birak davranisi deterministik degil.
-  Referans: [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:370)
-- Replikasyon bildirimi icin `OnRep_GridUpdated()` var, ancak sunucu tarafli mutasyonlardan sonra UI refresh zincirinin tum ekranlarda eksiksiz baglandigi bu kodlardan tek basina garanti edilmiyor.
-  Referans: [PostApocInventoryTypes.cpp](C:\GercekProje\Gercek\Source\Gercek\PostApocInventoryTypes.cpp:421)
+### Kondisyon ve ekonomi sistemi
+- Her item instance `10-100` kondisyon tutuyor.
+- `>=100` baz degerli itemlar icin condition breakpoints:
+  - `85-100`: kayip yok
+  - `70-84`: `%15` kayip
+  - `49-69`: `%28` kayip
+  - `25-48`: `%48` kayip
+  - `10-24`: `%80` kayip
+- `99 ve alti` baz degerli itemlar icin:
+  - `70-100`: kayip yok
+  - `10-69`: `%30` kayip
+- Tum yuvarlama `RoundToInt` ile yapiliyor.
 
-### Henuz eksik veya netlestirilmemis alanlar
+### TradeKnowledge sistemi
+- `TradeXP` sadece serverda artiyor.
+- Tier progression:
+  - `0-1999`: `Novice`
+  - `2000-4999`: `Apprentice`
+  - `5000+`: `Expert`
+- UI bilgi katmani:
+  - `Novice`: `???`
+  - `Apprentice`: yaklasik aralik (`~ min-max`)
+  - `Expert`: net deger
+- Mekanik katman:
+  - Tuccardan alinan mallarda `Apprentice` `%5`, `Expert` `%10` gercek alim avantaji sagliyor.
+  - Bu indirim server-side trade validation'a dahil.
 
-- Oyuncunun aktif kullandigi envanter UI'nin hangisi olacagi:
-  klasik slot bazli ekran mi, yoksa grid/tetris envanter mi?
-- Grid envanter ile dunya item pickup akisinin oyuncuya entegre edilmesi.
-- Tuccar UI, barter ekran akisi ve oyuncu-grid ile tuccar-grid arasindaki somut takas ekranlari.
-- Co-op oyun akisinda envanter, item pickup ve trader davranisinin yetki/replication kurallari.
-- Save/load kapsaminda sadece ses degil, oyuncu envanteri ve oyun ilerlemesinin kaliciligi.
+### Trade sistemi
+- Trade teklifleri artik `FGuid` tabanli item instance listeleriyle tutuluyor.
+- Offer panelleri C++ tarafinda karakter state'inden dolduruluyor.
+- Trade screen acildiginda oyuncu ve tuccar teklif listeleri sifirlaniyor.
+- Grid item click/double-click ve drag-drop ile offer listelerine ekleme/cikarma yapilabiliyor.
+- Server-side trade validation:
+  - mesafe kontrolu
+  - stale selection kontrolu
+  - value validation
+  - rollback ile kismi veri kaybi onleme
+- Trade sonucu client RPC ile bildiriliyor.
 
-## 3. Onerilen Gelistirme Sirasi
+### Loot container sistemi
+- `ALootContainerBase` kendi `UPostApocInventoryComponent` envanterini tasiyor.
+- Item alma/birakma server authority ile gerceklesiyor.
+- Item transferlerinde instance id ve condition korunuyor.
+- Shared access veya tek oyuncu kullanim kurallari var.
 
-Bu sira, sistemi dallandirip karmasiklastirmadan once tek bir oynanis omurgasi olusturmak icin secildi.
+### Pickup sistemi
+- `APickupBase`, `AItemBase`, `AWorldItemActor` dunyadaki alinabilir item omurgalari.
+- Pickup sonrasinda item serverda oyuncu envanterine condition bilgisiyle yaziliyor.
+- Drop sonrasinda item condition kaybetmeden dunya aktorune donusuyor.
 
-1. Envanter dogrultusunu netlestir ve tek sisteme in.
-   Oneri: Oyuncu tarafinda hedef sistem `UPostApocInventoryComponent` olsun. Klasik `UInventoryComponent` ya kaldirilir ya da yalnizca gecici uyumluluk katmani olarak tutulur.
+### Save / Load / Reconnect
+- Host-authoritative save omurgasi aktif.
+- Oyuncu verileri host bilgisayarindaki tek save dosyasina yaziliyor.
+- `SteamId` bazli oyuncu restore yapiliyor.
+- `Logout` ve autosave akisi mevcut.
+- Reconnect, duplicate join ve retry restore senaryolari sertlestirildi.
+- Save version `4`:
+  - instance-id
+  - rotation
+  - condition
+  - fill state
+  - merchant inventory
+  - chest/container inventory
+  - persistent dropped item state
+  verilerini sakliyor.
+- Legacy save'ler migrasyonla yuklenebiliyor.
 
-2. Oyuncu pickup akisini grid envantere bagla.
-   `AItemBase` ve `AWorldItemActor` tarafindaki pickup mantigi oyuncunun kullandigi nihai envanter sistemine yazilmali.
+### Dunya persistence
+- `AGercekGameMode` artik merchant, chest/container ve runtime dropped item state'ini snapshot/restore ediyor.
+- `AMerchantBase` ve `ALootContainerBase` `PersistentId` bazli restore aliyor.
+- `AWorldItemActor` sadece `persistent world drop` olarak isaretliyse save'e giriyor; map'e editor'den konmus normal dunya loot'u gereksiz yere save dosyasina kopyalanmiyor.
+- Autosave disk yazimi async calisiyor ve save in-flight iken gelen yeni save istegi queue'ya alinip tek follow-up save olarak isleniyor.
 
-3. Grid envanter icin oyuncu UI'sini tamamla.
-   Sabit widget iskeleti, surukle-birak, rotate, tooltip, item value ve condition gosterimi bu asamada tamamlanmali.
+### Steam co-op / session sistemi
+- `UMultiplayerSessionSubsystem` create/find/join/continue akislarini yonetiyor.
+- Session metadata:
+  - visibility
+  - password protected/hash
+  - session id
+  - save slot
+  - host identity
+  - continue flag
+  - map path
+- Host create sonrasi `Istanbul` haritasina `?listen` ile travel ediyor.
+- Friends list ve invite overlay omurgasi aktif.
 
-4. Tuccar ekranini oyuncu envanteriyle bagla.
-   `MerchantBase` envanteri sadece veri tutmakla kalmamali; oyuncu tarafinda alim-satim veya barter ekranina baglanmali.
+### Main menu sistemi
+- Yeni `WBP_MainMenu` buton akisi C++ ile bagli.
+- `WidgetSwitcher` tabanli sayfa yonetimi var.
+- `Continue`, `Create`, `Join`, `InviteFriends`, `Exit` akislari C++ tarafinda calisiyor.
+- `NativeDestruct` icinde session delegate temizligi yapiliyor.
 
-5. Ekonomi ve item instance modelini duzelt.
-   Ayni itemin birden fazla kopyasini saglikli tasimak icin `RowName` disinda instance bazli kimlik, quantity ve condition modeli eklenmeli.
+## 3. Tamamlanan Buyuk Refactorlar
 
-6. Multiplayer harita ve gameplay akisini birlestir.
-   Session kuruldugunda gidilen harita, mevcut varsayilan oyun akisiyla ayni haritaya alinmali. Sonra pickup, envanter ve trader aksiyonlari icin server-authoritative kurallar netlestirilmeli.
+1. Server-guvenli etkileşim mimarisi.
+2. Host-authoritative save/load ve reconnect.
+3. Pickup ve loot container base class omurgalari.
+4. Instance-id tabanli grid item kimligi.
+5. Condition + economy sistemi.
+6. TradeKnowledge'un UI + mekanik trade katmanina entegrasyonu.
+7. Trade offer panellerinin C++ instance-id state'e tasinmasi.
 
-7. Ses ve menu entegrasyonunu kapat.
-   `MainMenuWidget` slider'lari dogrudan `AudioSettingsSubsystem` ile konusmali ve mevcut save sistemi fiilen kullanilmali.
+## 4. Kalan Bilincli Riskler / Sonraki Adimlar
 
-8. Save/load kapsamini genislet.
-   Ses ayarlari disindaki oyun verileri icin de kalici bir save stratejisi tasarlanmalı.
+- `AudioSettingsSubsystem` entegrasyonu menu redesign sonrasina birakildi.
+- Grid UI tooltip/label gorunurlugu, `WBP_InventoryGridItem` icinde `Txt_ItemName`, `Txt_ItemCondition`, `Txt_ItemValue` alanlari varsa zenginlesir; yoksa tooltip metni yine calisir.
+- Trade offer panelleri runtime'da `Txt_OyuncuTeklif` ve `Txt_TuccarIstek` anchor'larina gore yerlestiriliyor. Trade BP layout'u buyuk oranda degisirse panel pozisyonlari yeniden ayarlanabilir.
+- Synchronous asset loading (`LoadSynchronous`) pickup/icon tarafinda halen var; buyuk asset havuzunda ileride async stream'e gecmek daha saglikli olur.
+- Runtime world-state persistence aktif. Kalan yapisal risk daha cok world-partition/streaming actor senaryolarinda restore zamanlamasi tarafindadir.
 
-## 4. Kisa Teknik Sonuc
+## 5. Teknik Ozet
 
-Projenin cekirdegi saglamlasiyor, ancak su an en buyuk teknik karar noktasi envanter mimarisi.
-Grid sistemine gecilecekse bundan sonraki UI, trader ve multiplayer isleri o eksene oturtulmali.
-En fazla kaldirac etkisi yaratacak sonraki adim, oyuncu envanterini tek bir grid akisina birlestirmek olacaktır.
+Proje artik basit bir FPS template degil.
+Su anki omurga:
+- survival
+- grid inventory
+- condition economy
+- TradeKnowledge
+- trader / loot container
+- host save/load
+- Steam co-op session
+- server-authoritative interaction
+sistemlerini ayni mimaride birlestiriyor.
+
+Bundan sonraki en mantikli buyuk adimlar:
+1. Async asset loading ile UI/pickup hitch riskini azaltmak.
+2. 2-4 istemcili sahada co-op test checklist'i ile pickup / trade / reconnect / continue senaryolarini pratikte dogrulamak.
+3. World-partition veya streaming actor senaryolari icin gec yüklenen persistent actor restore katmani eklemek.
