@@ -56,6 +56,14 @@ bool UMainMenuWidget::Initialize()
 	{
 		Btn_BackToNewGame->OnClicked.AddDynamic(this, &UMainMenuWidget::OnBackToNewGameClicked);
 	}
+	if (Btn_BackFromJoin)
+	{
+		Btn_BackFromJoin->OnClicked.AddDynamic(this, &UMainMenuWidget::OnBackFromJoinClicked);
+	}
+	if (Btn_BackFromInvite)
+	{
+		Btn_BackFromInvite->OnClicked.AddDynamic(this, &UMainMenuWidget::OnBackFromInviteClicked);
+	}
 
 	if (MultiplayerSubsystem)
 	{
@@ -253,6 +261,16 @@ void UMainMenuWidget::OnInviteFriendsClicked()
 void UMainMenuWidget::OnBackToNewGameClicked()
 {
 	SetActivePage(NewGamePageIndex);
+}
+
+void UMainMenuWidget::OnBackFromJoinClicked()
+{
+	SetActivePage(NewGamePageIndex);
+}
+
+void UMainMenuWidget::OnBackFromInviteClicked()
+{
+	SetActivePage(CreateServerPageIndex);
 }
 
 void UMainMenuWidget::HandleCreateSessionComplete(bool bWasSuccessful)

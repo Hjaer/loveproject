@@ -93,6 +93,12 @@ protected:
 	TObjectPtr<UButton> Btn_BackToNewGame = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_BackFromJoin = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Btn_BackFromInvite = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UComboBoxString> ServerType = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
@@ -140,6 +146,12 @@ private:
 
 	UFUNCTION()
 	void OnBackToNewGameClicked();
+
+	UFUNCTION()
+	void OnBackFromJoinClicked();
+
+	UFUNCTION()
+	void OnBackFromInviteClicked();
 
 	UFUNCTION()
 	void HandleCreateSessionComplete(bool bWasSuccessful);
