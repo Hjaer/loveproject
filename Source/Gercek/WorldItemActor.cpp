@@ -3,6 +3,7 @@
 #include "WorldItemActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
+#include "PlayerInventoryComponent.h"
 #include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
 
 // Sets default values
@@ -58,8 +59,7 @@ void AWorldItemActor::OnInteract_Implementation(AGercekCharacter *Player) {
   }
 
   // Fetch the player's inventory.
-  UPostApocInventoryComponent *Inventory =
-      Player->FindComponentByClass<UPostApocInventoryComponent>();
+  UPlayerInventoryComponent *Inventory = Player->GetPlayerInventoryComponent();
   if (!Inventory) {
     UE_LOG(LogTemp, Warning,
            TEXT("[WorldItem] Player '%s' has no PostApocInventoryComponent."),

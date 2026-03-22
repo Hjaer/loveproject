@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "TimerManager.h"
 #include "PostApocHUDWidget.generated.h"
 
 class AGercekCharacter;
@@ -60,4 +61,6 @@ private:
 
   UPROPERTY()
   TObjectPtr<AGercekCharacter> BoundCharacter = nullptr;
+
+  FTimerHandle DelayedBindRetryHandle;
 };

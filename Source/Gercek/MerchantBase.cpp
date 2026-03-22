@@ -4,12 +4,13 @@
 #include "GercekCharacter.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocItemTypes.h"
+#include "WorldInventoryComponent.h"
 
 AMerchantBase::AMerchantBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	MerchantInventory = CreateDefaultSubobject<UPostApocInventoryComponent>(TEXT("MerchantInventory"));
+	MerchantInventory = CreateDefaultSubobject<UWorldInventoryComponent>(TEXT("MerchantInventory"));
 	if (MerchantInventory)
 	{
 		MerchantInventory->GridColumns = 10;

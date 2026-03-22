@@ -15,6 +15,7 @@
 class AMerchantBase; // Ileriye donuk ticaret aktoru tanimlamasi
 class ALootContainerBase;
 class UPostApocHUDWidget;
+class UPlayerInventoryComponent;
 class UPostApocTradeOfferPanelWidget;
 class UTradeComponent;
 // EItemType ve EItemRarity artik ItemTypes.h'de tanimli.
@@ -63,6 +64,11 @@ public:
   UFUNCTION(BlueprintPure, Category = "Survival")
   float GetCurrentThirst() const { return Thirst; }
 
+  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+  UPlayerInventoryComponent *GetPlayerInventoryComponent() const {
+    return InventoryComponent;
+  }
+
 protected:
   virtual void BeginPlay() override;
   virtual void PawnClientRestart() override;
@@ -80,6 +86,9 @@ public:
   void ClientOpenTradeScreen(class AMerchantBase *TargetMerchant);
   UFUNCTION(Client, Reliable)
   void ClientOpenLootContainer(class ALootContainerBase *TargetContainer);
+  UFUNCTION(Client, Reliable)
+  void ClientSyncPlayerInventory(const TArray<FGridSlotData>& SyncedSlots,
+                                 const FString& DataTablePath);
   // EtkileÅŸim fonksiyonu
   void Interact();
 
@@ -116,7 +125,7 @@ protected:
   void ResetStaminaRecoveryBuff();
 
   // Son hasar alÄ±nan zamanÄ± takip eden sayÄ±ÅŸ (Health regen lockout iÃ§in)
-  UPROPERTY(Replicated)
+  UPROPERTY()
   float LastDamageTakenTime;
 
   // HaÅŸar sistemi ile entegre: Son hasar zamanÄ±nÄ± gÃ¼nceller
@@ -226,7 +235,7 @@ protected:
   // Eski liste-tabanlÄ± UInventoryComponent kaldÄ±rÄ±ldÄ±; yerine Ä±zgara mantÄ±klÄ±
   // UPostApocInventoryComponent kullanÄ±lÄ±yor.
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
-  UPostApocInventoryComponent *InventoryComponent;
+  UPlayerInventoryComponent *InventoryComponent;
 
   UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Trade")
   UTradeComponent *TradeComponent;
@@ -425,6 +434,8 @@ public:
   void Look(const struct FInputActionValue &Value);
 
 private:
+  void EnsureLocalHUDCreated();
+  void SyncPlayerInventoryToOwner();
   void EmitSurvivalStatChangeEvents(bool bForce = false);
   bool ShouldBroadcastSurvivalValue(float CurrentValue, float LastBroadcastValue,
                                     bool bForce) const;

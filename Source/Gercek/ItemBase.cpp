@@ -1,6 +1,7 @@
 #include "ItemBase.h"
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
+#include "PlayerInventoryComponent.h"
 // #include "InventoryComponent.h" -- Eski liste sistemi (TradeComponent hâlâ
 // kullanıyor)
 #include "PostApocInventoryTypes.h" // Grid tabanlı yeni sistem
@@ -37,7 +38,7 @@ static FDataTableRowHandle BuildPostApocHandle(
 AItemBase::AItemBase() {
   PrimaryActorTick.bCanEverTick = false;
   bReplicates = true;
-  SetReplicateMovement(true);
+  SetReplicateMovement(false);
 
   ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
   RootComponent = ItemMesh;
@@ -78,6 +79,7 @@ void AItemBase::OnConstruction(const FTransform &Transform) {
 
   const bool bIsHeavy = Row->Weight > HeavyWeightThreshold;
   ItemMesh->SetSimulatePhysics(!bIsHeavy);
+  SetReplicateMovement(!bIsHeavy);
 }
 
 void AItemBase::Interact(AGercekCharacter *Player) {
@@ -86,8 +88,7 @@ void AItemBase::Interact(AGercekCharacter *Player) {
   }
 
   const FDataTableRowHandle Handle = BuildPostApocHandle(ItemRowHandle);
-  UPostApocInventoryComponent *Inventory =
-      Player->FindComponentByClass<UPostApocInventoryComponent>();
+  UPlayerInventoryComponent *Inventory = Player->GetPlayerInventoryComponent();
   FGuid AddedInstanceId;
   if (IsValid(Inventory) &&
       Inventory->TryAddItem(Handle, AddedInstanceId, ItemCondition)) {

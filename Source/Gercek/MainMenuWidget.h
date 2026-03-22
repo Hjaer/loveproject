@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Types/SlateEnums.h"
 #include "MultiplayerSessionSubsystem.h"
 #include "MainMenuWidget.generated.h"
 
@@ -10,6 +11,7 @@ class UComboBoxString;
 class UEditableTextBox;
 class UImage;
 class UMultiplayerSessionSubsystem;
+class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
 
@@ -104,6 +106,9 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableTextBox> InputPassword = nullptr;
 
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_ServerTypeValidation = nullptr;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Navigation")
 	int32 MainPageIndex = 0;
 
@@ -142,6 +147,9 @@ private:
 	void OnCreateClicked();
 
 	UFUNCTION()
+	void OnServerTypeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
 	void OnInviteFriendsClicked();
 
 	UFUNCTION()
@@ -173,6 +181,8 @@ private:
 
 	UWidgetSwitcher* ResolveMenuSwitcher() const;
 	void SetActivePage(int32 PageIndex) const;
+	void SetServerTypeValidationMessage(const FText& Message) const;
+	bool HasValidSelectedServerType() const;
 	EGercekServerVisibility ResolveSelectedServerVisibility() const;
 	void EnsureDefaultServerTypeOptions();
 

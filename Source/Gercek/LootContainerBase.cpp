@@ -3,8 +3,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
 #include "Net/UnrealNetwork.h"
+#include "PlayerInventoryComponent.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocItemTypes.h"
+#include "WorldInventoryComponent.h"
 
 ALootContainerBase::ALootContainerBase()
 {
@@ -20,7 +22,7 @@ ALootContainerBase::ALootContainerBase()
 	ContainerMesh->SetGenerateOverlapEvents(false);
 	ContainerMesh->SetSimulatePhysics(false);
 
-	ContainerInventory = CreateDefaultSubobject<UPostApocInventoryComponent>(TEXT("ContainerInventory"));
+	ContainerInventory = CreateDefaultSubobject<UWorldInventoryComponent>(TEXT("ContainerInventory"));
 	if (ContainerInventory)
 	{
 		ContainerInventory->GridColumns = GridColumns;
@@ -81,7 +83,7 @@ bool ALootContainerBase::TransferItemToPlayer(AGercekCharacter* Player, FGuid It
 		return false;
 	}
 
-	UPostApocInventoryComponent* PlayerInventory = Player->FindComponentByClass<UPostApocInventoryComponent>();
+	UPlayerInventoryComponent* PlayerInventory = Player->GetPlayerInventoryComponent();
 	if (!PlayerInventory)
 	{
 		return false;
@@ -125,7 +127,7 @@ bool ALootContainerBase::TransferItemFromPlayer(AGercekCharacter* Player, FGuid 
 		return false;
 	}
 
-	UPostApocInventoryComponent* PlayerInventory = Player->FindComponentByClass<UPostApocInventoryComponent>();
+	UPlayerInventoryComponent* PlayerInventory = Player->GetPlayerInventoryComponent();
 	if (!PlayerInventory)
 	{
 		return false;

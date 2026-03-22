@@ -2,6 +2,7 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "GercekCharacter.h"
+#include "PlayerInventoryComponent.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocItemTypes.h"
 
@@ -9,7 +10,7 @@ APickupBase::APickupBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
-	SetReplicateMovement(true);
+	SetReplicateMovement(false);
 
 	PickupMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PickupMesh"));
 	RootComponent = PickupMesh;
@@ -44,8 +45,7 @@ void APickupBase::Interact(AGercekCharacter* Player)
 		return;
 	}
 
-	UPostApocInventoryComponent* Inventory =
-		Player->FindComponentByClass<UPostApocInventoryComponent>();
+	UPlayerInventoryComponent* Inventory = Player->GetPlayerInventoryComponent();
 	if (!Inventory)
 	{
 		return;

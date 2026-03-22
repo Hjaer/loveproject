@@ -8,6 +8,8 @@
 #include "PostApocInventoryTypes.h"
 #include "MerchantBase.generated.h"
 
+class UWorldInventoryComponent;
+
 UCLASS()
 class GERCEK_API AMerchantBase : public ACharacter, public IInteractable
 {
@@ -24,7 +26,7 @@ public:
 	FText MerchantName;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Merchant Inventory")
-	UPostApocInventoryComponent* MerchantInventory = nullptr;
+	UWorldInventoryComponent* MerchantInventory = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Merchant Inventory")
 	int32 GridColumns = 10;
@@ -42,7 +44,7 @@ public:
 	FText GetMerchantName() const { return MerchantName; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Merchant Inventory")
-	UPostApocInventoryComponent* GetMerchantInventory() const { return MerchantInventory; }
+	UWorldInventoryComponent* GetMerchantInventory() const { return MerchantInventory; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
 	FString GetPersistentId() const;

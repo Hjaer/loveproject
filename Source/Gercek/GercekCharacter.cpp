@@ -25,6 +25,7 @@
 #include "Kismet/KismetTextLibrary.h"
 #include "MerchantBase.h"
 #include "Net/UnrealNetwork.h"
+#include "PlayerInventoryComponent.h"
 #include "PostApocInventoryGridWidget.h"
 #include "PostApocInventoryTypes.h"
 #include "PostApocHUDWidget.h"
@@ -33,6 +34,7 @@
 #include "TimerManager.h"
 #include "TradeComponent.h"
 #include "LootContainerBase.h"
+#include "WorldInventoryComponent.h"
 #include "WorldItemActor.h"
 
 namespace GercekInteraction {
@@ -64,7 +66,7 @@ AGercekCharacter::AGercekCharacter() {
   BreathingAudioComponent->bAutoActivate = false; // BaÅŸlangÄ±Ã§ta Ã§almasÄ±n
 
   // Grid (Tetris) TabanlÄ± Envanter BileÅŸeni BaÅŸlatma
-  InventoryComponent = CreateDefaultSubobject<UPostApocInventoryComponent>(
+  InventoryComponent = CreateDefaultSubobject<UPlayerInventoryComponent>(
       TEXT("InventoryComponent"));
   if (InventoryComponent) {
     InventoryComponent->GridColumns = 10;
@@ -171,21 +173,52 @@ void AGercekCharacter::BroadcastCurrentSurvivalStats(bool bForce) {
   EmitSurvivalStatChangeEvents(bForce);
 }
 
+void AGercekCharacter::EnsureLocalHUDCreated() {
+  if (!IsLocallyControlled() || !PlayerHUDClass) {
+    return;
+  }
+
+  APlayerController *PlayerController = Cast<APlayerController>(Controller);
+  if (!PlayerController) {
+    return;
+  }
+
+  if (!PlayerHUDWidget) {
+    PlayerHUDWidget =
+        CreateWidget<UPostApocHUDWidget>(PlayerController, PlayerHUDClass);
+  }
+
+  if (PlayerHUDWidget && !PlayerHUDWidget->IsInViewport()) {
+    PlayerHUDWidget->AddToViewport();
+  }
+}
+
+void AGercekCharacter::SyncPlayerInventoryToOwner() {
+  if (!HasAuthority() || !InventoryComponent || IsLocallyControlled()) {
+    return;
+  }
+
+  TArray<FGridSlotData> SyncedSlots;
+  FString DataTablePath;
+  InventoryComponent->ExportSaveData(SyncedSlots, DataTablePath);
+  ClientSyncPlayerInventory(SyncedSlots, DataTablePath);
+}
+
 // --- REPLICATION KAYIT FONKSÄ°YONU (EKLEME) ---
 void AGercekCharacter::GetLifetimeReplicatedProps(
     TArray<FLifetimeProperty> &OutLifetimeProps) const {
   Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
   DOREPLIFETIME(AGercekCharacter, Health);
-  DOREPLIFETIME(AGercekCharacter, Radiation);
-  DOREPLIFETIME(AGercekCharacter, Stamina);
-  DOREPLIFETIME(AGercekCharacter, Hunger);
-  DOREPLIFETIME(AGercekCharacter, Thirst);
-  DOREPLIFETIME(AGercekCharacter, LastDamageTakenTime);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, Radiation, COND_OwnerOnly);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, Stamina, COND_OwnerOnly);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, Hunger, COND_OwnerOnly);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, Thirst, COND_OwnerOnly);
 
   // Ticaret XP ve Bilgi Seviyesi
-  DOREPLIFETIME(AGercekCharacter, TradeXP);
-  DOREPLIFETIME(AGercekCharacter, CurrentKnowledge);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, TradeXP, COND_OwnerOnly);
+  DOREPLIFETIME_CONDITION(AGercekCharacter, CurrentKnowledge,
+                          COND_OwnerOnly);
 }
 
 // ==== TÄ°CARET VE BÄ°LGÄ° SEVÄ°YESÄ° (TRADE KNOWLEDGE) ====
@@ -358,17 +391,7 @@ void AGercekCharacter::BeginPlay() {
         CameraShakeTimerHandle, this, &AGercekCharacter::PlayCameraShakePeriodic,
         0.35f, true);
 
-    // HUD sadece yerel sahipte oluÅŸturulmalÄ±.
-    if (PlayerHUDClass) {
-      if (APlayerController *PlayerController =
-              Cast<APlayerController>(Controller)) {
-        PlayerHUDWidget =
-            CreateWidget<UPostApocHUDWidget>(PlayerController, PlayerHUDClass);
-        if (PlayerHUDWidget) {
-          PlayerHUDWidget->AddToViewport();
-        }
-      }
-    }
+    EnsureLocalHUDCreated();
 
     EmitSurvivalStatChangeEvents(true);
   }
@@ -400,6 +423,9 @@ void AGercekCharacter::PawnClientRestart() {
       }
     }
   }
+
+  EnsureLocalHUDCreated();
+  EmitSurvivalStatChangeEvents(true);
 }
 
 // Called every frame
@@ -901,6 +927,20 @@ void AGercekCharacter::ClientOpenLootContainer_Implementation(
   }
 }
 
+void AGercekCharacter::ClientSyncPlayerInventory_Implementation(
+    const TArray<FGridSlotData> &SyncedSlots, const FString &DataTablePath) {
+  if (!InventoryComponent) {
+    return;
+  }
+
+  UDataTable *LoadedDataTable = InventoryComponent->ItemDataTable;
+  if (!DataTablePath.IsEmpty()) {
+    LoadedDataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+  }
+
+  InventoryComponent->ImportSaveData(SyncedSlots, LoadedDataTable);
+}
+
 void AGercekCharacter::ToggleInventory() {
   APlayerController *PC = Cast<APlayerController>(GetController());
   if (!PC || !PC->IsLocalController())
@@ -1202,6 +1242,8 @@ void AGercekCharacter::ShowInventoryDetails() {
 }
 
 void AGercekCharacter::HandleGridInventoryUpdated() {
+  SyncPlayerInventoryToOwner();
+
   if (InventoryComponent && IsValid(InventoryWidget)) {
     InventoryComponent->NativeRefreshUI(InventoryWidget);
   }

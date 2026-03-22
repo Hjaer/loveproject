@@ -27,7 +27,16 @@ void UPostApocHUDWidget::BindToCharacter() {
   }
 
   if (!BoundCharacter) {
+    if (UWorld *World = GetWorld()) {
+      World->GetTimerManager().SetTimer(
+          DelayedBindRetryHandle, this, &UPostApocHUDWidget::BindToCharacter,
+          0.25f, false);
+    }
     return;
+  }
+
+  if (UWorld *World = GetWorld()) {
+    World->GetTimerManager().ClearTimer(DelayedBindRetryHandle);
   }
 
   BoundCharacter->OnHealthChanged.RemoveDynamic(
@@ -52,6 +61,10 @@ void UPostApocHUDWidget::BindToCharacter() {
 }
 
 void UPostApocHUDWidget::UnbindFromCharacter() {
+  if (UWorld *World = GetWorld()) {
+    World->GetTimerManager().ClearTimer(DelayedBindRetryHandle);
+  }
+
   if (!BoundCharacter) {
     return;
   }

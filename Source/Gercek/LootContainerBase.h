@@ -11,6 +11,7 @@
 
 class AGercekCharacter;
 class UStaticMeshComponent;
+class UWorldInventoryComponent;
 
 UCLASS(Blueprintable)
 class GERCEK_API ALootContainerBase : public AActor, public IInteractable
@@ -29,7 +30,7 @@ public:
 	TObjectPtr<UStaticMeshComponent> ContainerMesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Container")
-	TObjectPtr<UPostApocInventoryComponent> ContainerInventory = nullptr;
+	TObjectPtr<UWorldInventoryComponent> ContainerInventory = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Container")
 	FText ContainerName;
@@ -57,7 +58,7 @@ public:
 	FString PersistentId;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Container")
-	UPostApocInventoryComponent* GetContainerInventory() const { return ContainerInventory; }
+	UWorldInventoryComponent* GetContainerInventory() const { return ContainerInventory; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Persistence")
 	FString GetPersistentId() const;

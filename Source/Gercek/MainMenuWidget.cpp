@@ -4,6 +4,7 @@
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -47,6 +48,10 @@ bool UMainMenuWidget::Initialize()
 	if (Btn_Create)
 	{
 		Btn_Create->OnClicked.AddDynamic(this, &UMainMenuWidget::OnCreateClicked);
+	}
+	if (ServerType)
+	{
+		ServerType->OnSelectionChanged.AddDynamic(this, &UMainMenuWidget::OnServerTypeSelectionChanged);
 	}
 	if (Btn_InviteFriends)
 	{
@@ -106,6 +111,7 @@ void UMainMenuWidget::NativeConstruct()
 		PlayerController->SetShowMouseCursor(true);
 	}
 
+	SetServerTypeValidationMessage(FText::GetEmpty());
 	SetActivePage(MainPageIndex);
 
 	if (MultiplayerSubsystem)
@@ -222,6 +228,7 @@ void UMainMenuWidget::OnJoinServerClicked()
 
 void UMainMenuWidget::OnCreateServerClicked()
 {
+	SetServerTypeValidationMessage(FText::GetEmpty());
 	SetActivePage(CreateServerPageIndex);
 }
 
@@ -238,6 +245,16 @@ void UMainMenuWidget::OnCreateClicked()
 		return;
 	}
 
+	if (!HasValidSelectedServerType())
+	{
+		const FText ValidationMessage = FText::FromString(TEXT("Please select a server type."));
+		SetServerTypeValidationMessage(ValidationMessage);
+		HandleOperationMessage(ValidationMessage.ToString());
+		return;
+	}
+
+	SetServerTypeValidationMessage(FText::GetEmpty());
+
 	FGercekSessionConfig SessionConfig;
 	SessionConfig.MaxPlayers = 4;
 	SessionConfig.bIsLAN = false;
@@ -251,6 +268,14 @@ void UMainMenuWidget::OnCreateClicked()
 	}
 
 	MultiplayerSubsystem->CreateServerWithConfig(SessionConfig);
+}
+
+void UMainMenuWidget::OnServerTypeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	if (HasValidSelectedServerType())
+	{
+		SetServerTypeValidationMessage(FText::GetEmpty());
+	}
 }
 
 void UMainMenuWidget::OnInviteFriendsClicked()
@@ -332,6 +357,26 @@ void UMainMenuWidget::SetActivePage(int32 PageIndex) const
 	}
 }
 
+void UMainMenuWidget::SetServerTypeValidationMessage(const FText& Message) const
+{
+	if (TXT_ServerTypeValidation)
+	{
+		TXT_ServerTypeValidation->SetText(Message);
+	}
+}
+
+bool UMainMenuWidget::HasValidSelectedServerType() const
+{
+	if (!ServerType)
+	{
+		return true;
+	}
+
+	const FString SelectedValue = ServerType->GetSelectedOption().TrimStartAndEnd();
+	return !SelectedValue.IsEmpty() &&
+		!SelectedValue.Equals(TEXT("Select Server Type"), ESearchCase::IgnoreCase);
+}
+
 EGercekServerVisibility UMainMenuWidget::ResolveSelectedServerVisibility() const
 {
 	if (!ServerType)
@@ -360,13 +405,35 @@ EGercekServerVisibility UMainMenuWidget::ResolveSelectedServerVisibility() const
 
 void UMainMenuWidget::EnsureDefaultServerTypeOptions()
 {
-	if (!ServerType || ServerType->GetOptionCount() > 0)
+	if (!ServerType)
 	{
 		return;
 	}
 
-	ServerType->AddOption(TEXT("Public"));
-	ServerType->AddOption(TEXT("FriendsOnly"));
-	ServerType->AddOption(TEXT("Private"));
-	ServerType->SetSelectedIndex(0);
+	const TArray<FString> RequiredOptions = {
+		TEXT("Select Server Type"),
+		TEXT("Public"),
+		TEXT("FriendsOnly"),
+		TEXT("Private")
+	};
+
+	for (const FString& RequiredOption : RequiredOptions)
+	{
+		bool bExists = false;
+		for (int32 OptionIndex = 0; OptionIndex < ServerType->GetOptionCount(); ++OptionIndex)
+		{
+			if (ServerType->GetOptionAtIndex(OptionIndex).Equals(RequiredOption, ESearchCase::IgnoreCase))
+			{
+				bExists = true;
+				break;
+			}
+		}
+
+		if (!bExists)
+		{
+			ServerType->AddOption(RequiredOption);
+		}
+	}
+
+	ServerType->SetSelectedOption(TEXT("Select Server Type"));
 }
