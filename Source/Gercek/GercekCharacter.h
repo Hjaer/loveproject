@@ -14,10 +14,14 @@
 
 class AMerchantBase; // Ileriye donuk ticaret aktoru tanimlamasi
 class ALootContainerBase;
+class UPostApocHUDWidget;
 class UPostApocTradeOfferPanelWidget;
 class UTradeComponent;
 // EItemType ve EItemRarity artik ItemTypes.h'de tanimli.
 // ConsumeItem fonksiyonu EItemType::Food, EItemType::Med vb. kullanir.
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSurvivalStatChanged, float,
+                                             NewValue, float, MaxValue);
 
 UCLASS()
 class GERCEK_API AGercekCharacter : public ACharacter {
@@ -31,6 +35,33 @@ public:
   FText GetKnowledgeAdjustedValue(float BaseValue) const;
 
   AGercekCharacter();
+
+  UPROPERTY(BlueprintAssignable, Category = "Survival|Events")
+  FOnSurvivalStatChanged OnHealthChanged;
+
+  UPROPERTY(BlueprintAssignable, Category = "Survival|Events")
+  FOnSurvivalStatChanged OnStaminaChanged;
+
+  UPROPERTY(BlueprintAssignable, Category = "Survival|Events")
+  FOnSurvivalStatChanged OnHungerChanged;
+
+  UPROPERTY(BlueprintAssignable, Category = "Survival|Events")
+  FOnSurvivalStatChanged OnThirstChanged;
+
+  UFUNCTION(BlueprintCallable, Category = "Survival|Events")
+  void BroadcastCurrentSurvivalStats(bool bForce = false);
+
+  UFUNCTION(BlueprintPure, Category = "Survival")
+  float GetCurrentHealth() const { return Health; }
+
+  UFUNCTION(BlueprintPure, Category = "Survival")
+  float GetCurrentStamina() const { return Stamina; }
+
+  UFUNCTION(BlueprintPure, Category = "Survival")
+  float GetCurrentHunger() const { return Hunger; }
+
+  UFUNCTION(BlueprintPure, Category = "Survival")
+  float GetCurrentThirst() const { return Thirst; }
 
 protected:
   virtual void BeginPlay() override;
@@ -186,7 +217,10 @@ protected:
 
   // HUD ReferansÄ±
   UPROPERTY(EditDefaultsOnly, Category = "HUD")
-  TSubclassOf<class UUserWidget> PlayerHUDClass;
+  TSubclassOf<class UPostApocHUDWidget> PlayerHUDClass;
+
+  UPROPERTY()
+  TObjectPtr<UPostApocHUDWidget> PlayerHUDWidget = nullptr;
 
   // Grid TabanlÄ± Envanter BileÅŸeni (Grid Inventory Component)
   // Eski liste-tabanlÄ± UInventoryComponent kaldÄ±rÄ±ldÄ±; yerine Ä±zgara mantÄ±klÄ±
@@ -391,6 +425,9 @@ public:
   void Look(const struct FInputActionValue &Value);
 
 private:
+  void EmitSurvivalStatChangeEvents(bool bForce = false);
+  bool ShouldBroadcastSurvivalValue(float CurrentValue, float LastBroadcastValue,
+                                    bool bForce) const;
   void RefreshTradeKnowledgeTierFromXP();
   void RefreshTradeUI();
   void RefreshTradeOfferPanels();
@@ -453,6 +490,15 @@ protected:
   float StarvationAimSwaySpeed = 2.5f;
 
   float HungerAimSwayTime = 0.0f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival|Events",
+            meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+  float SurvivalBroadcastThreshold = 0.5f;
+
+  float LastBroadcastHealth = -1.0f;
+  float LastBroadcastStamina = -1.0f;
+  float LastBroadcastHunger = -1.0f;
+  float LastBroadcastThirst = -1.0f;
 };
 
 

@@ -27,6 +27,7 @@
 #include "Net/UnrealNetwork.h"
 #include "PostApocInventoryGridWidget.h"
 #include "PostApocInventoryTypes.h"
+#include "PostApocHUDWidget.h"
 #include "PostApocItemTypes.h"
 #include "PostApocTradeOfferWidgets.h"
 #include "TimerManager.h"
@@ -130,6 +131,44 @@ AGercekCharacter::AGercekCharacter() {
   // Son hasar alma zamanÄ±nÄ± baÅŸlangÄ±Ã§ta Ã§ok kÃ¼Ã§Ã¼k bir deÄŸere ayarla (hemen
   // regen baÅŸlasÄ±n)
   LastDamageTakenTime = -999.0f;
+}
+
+bool AGercekCharacter::ShouldBroadcastSurvivalValue(
+    float CurrentValue, float LastBroadcastValue, bool bForce) const {
+  return bForce || LastBroadcastValue < 0.0f ||
+         FMath::Abs(CurrentValue - LastBroadcastValue) >=
+             SurvivalBroadcastThreshold;
+}
+
+void AGercekCharacter::EmitSurvivalStatChangeEvents(bool bForce) {
+  if (!IsLocallyControlled()) {
+    return;
+  }
+
+  if (ShouldBroadcastSurvivalValue(Health, LastBroadcastHealth, bForce)) {
+    OnHealthChanged.Broadcast(Health, MaxHealth);
+    LastBroadcastHealth = Health;
+  }
+
+  const float EffectiveMaxStamina = GetEffectiveMaxStamina();
+  if (ShouldBroadcastSurvivalValue(Stamina, LastBroadcastStamina, bForce)) {
+    OnStaminaChanged.Broadcast(Stamina, EffectiveMaxStamina);
+    LastBroadcastStamina = Stamina;
+  }
+
+  if (ShouldBroadcastSurvivalValue(Hunger, LastBroadcastHunger, bForce)) {
+    OnHungerChanged.Broadcast(Hunger, MaxHunger);
+    LastBroadcastHunger = Hunger;
+  }
+
+  if (ShouldBroadcastSurvivalValue(Thirst, LastBroadcastThirst, bForce)) {
+    OnThirstChanged.Broadcast(Thirst, MaxThirst);
+    LastBroadcastThirst = Thirst;
+  }
+}
+
+void AGercekCharacter::BroadcastCurrentSurvivalStats(bool bForce) {
+  EmitSurvivalStatChangeEvents(bForce);
 }
 
 // --- REPLICATION KAYIT FONKSÄ°YONU (EKLEME) ---
@@ -244,6 +283,8 @@ void AGercekCharacter::ApplyPersistentPlayerRecord(
 
     InventoryComponent->ImportSaveData(SavedSlots, LoadedDataTable);
   }
+
+  EmitSurvivalStatChangeEvents(true);
 }
 
 // Meryem ve Hazar iÃ§in not:
@@ -319,12 +360,17 @@ void AGercekCharacter::BeginPlay() {
 
     // HUD sadece yerel sahipte oluÅŸturulmalÄ±.
     if (PlayerHUDClass) {
-      UUserWidget *HUDWidget =
-          CreateWidget<UUserWidget>(GetWorld(), PlayerHUDClass);
-      if (HUDWidget) {
-        HUDWidget->AddToViewport();
+      if (APlayerController *PlayerController =
+              Cast<APlayerController>(Controller)) {
+        PlayerHUDWidget =
+            CreateWidget<UPostApocHUDWidget>(PlayerController, PlayerHUDClass);
+        if (PlayerHUDWidget) {
+          PlayerHUDWidget->AddToViewport();
+        }
       }
     }
+
+    EmitSurvivalStatChangeEvents(true);
   }
 }
 
@@ -624,6 +670,8 @@ void AGercekCharacter::Tick(float DeltaTime) {
       BreathingAudioComponent->FadeOut(1.0f, 0.0f);
     }
   }
+
+  EmitSurvivalStatChangeEvents(false);
 }
 
 // Called to bind functionality to input
@@ -1039,6 +1087,8 @@ float AGercekCharacter::TakeDamage(float DamageAmount,
     UE_LOG(LogTemp, Log, TEXT("[Damage] %.1f hasar alindi. Kalan can: %.1f"),
            ActualDamage, Health);
   }
+
+  EmitSurvivalStatChangeEvents(false);
 
   return ActualDamage;
 }
