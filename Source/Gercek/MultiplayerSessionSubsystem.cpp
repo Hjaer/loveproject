@@ -31,6 +31,23 @@ namespace GercekSaveSlots
 	static const TCHAR* ContinueMetadata = TEXT("Gercek_CoopSession");
 }
 
+namespace GercekSaveHelpers
+{
+	static FString BuildHostWorldSaveSlotName(const FString& SessionId)
+	{
+		FString SanitizedSessionId = SessionId;
+		SanitizedSessionId.ReplaceInline(TEXT("-"), TEXT(""));
+		if (SanitizedSessionId.Len() > 12)
+		{
+			SanitizedSessionId = SanitizedSessionId.Left(12);
+		}
+
+		return SanitizedSessionId.IsEmpty()
+			? TEXT("Gercek_HostWorld")
+			: FString::Printf(TEXT("Gercek_HostWorld_%s"), *SanitizedSessionId);
+	}
+}
+
 UMultiplayerSessionSubsystem::UMultiplayerSessionSubsystem()
 {
 }
@@ -78,13 +95,14 @@ void UMultiplayerSessionSubsystem::CreateServerWithConfig(const FGercekSessionCo
 	{
 		PendingSessionConfig.MapPath = TEXT("/Game/Istanbul");
 	}
-	if (PendingSessionConfig.SaveSlotName.IsEmpty())
-	{
-		PendingSessionConfig.SaveSlotName = TEXT("Gercek_HostWorld");
-	}
 	if (PendingSessionConfig.SessionId.IsEmpty())
 	{
 		PendingSessionConfig.SessionId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+	}
+	if (PendingSessionConfig.SaveSlotName.IsEmpty())
+	{
+		PendingSessionConfig.SaveSlotName =
+			GercekSaveHelpers::BuildHostWorldSaveSlotName(PendingSessionConfig.SessionId);
 	}
 
 	if (const FNamedOnlineSession* ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession))
@@ -134,22 +152,23 @@ void UMultiplayerSessionSubsystem::CreateServerWithConfig(const FGercekSessionCo
 
 void UMultiplayerSessionSubsystem::ContinueLastSession()
 {
-	if (!CachedContinueInfo.bHasSave)
+	const FGercekContinueSessionInfo ContinueInfo = GetContinueSaveInfo();
+	if (!ContinueInfo.bHasSave)
 	{
 		BroadcastOperationMessage(TEXT("Devam edilecek kayitli bir co-op oturumu bulunamadi."));
 		return;
 	}
 
 	const FString LocalNetId = GetLocalNetIdString();
-	if (CachedContinueInfo.bWasHost || (!CachedContinueInfo.HostNetId.IsEmpty() && CachedContinueInfo.HostNetId == LocalNetId))
+	if (ContinueInfo.bWasHost || (!ContinueInfo.HostNetId.IsEmpty() && ContinueInfo.HostNetId == LocalNetId))
 	{
 		CreateServerWithConfig(BuildConfigFromContinueSave());
 		return;
 	}
 
 	bAutoJoinContinueSession = true;
-	PendingContinueSessionId = CachedContinueInfo.SessionId;
-	PendingJoinPassword = CachedContinueInfo.Password;
+	PendingContinueSessionId = ContinueInfo.SessionId;
+	PendingJoinPassword = ContinueInfo.Password;
 	FindServers(false);
 }
 
@@ -288,12 +307,31 @@ bool UMultiplayerSessionSubsystem::ShowInviteFriendsUI()
 
 bool UMultiplayerSessionSubsystem::HasContinueSave() const
 {
-	return CachedContinueInfo.bHasSave;
+	return IsContinueInfoUsable(CachedContinueInfo);
 }
 
 FGercekContinueSessionInfo UMultiplayerSessionSubsystem::GetContinueSaveInfo() const
 {
-	return CachedContinueInfo;
+	FGercekContinueSessionInfo ContinueInfo = CachedContinueInfo;
+	ContinueInfo.bHasSave = IsContinueInfoUsable(CachedContinueInfo);
+	return ContinueInfo;
+}
+
+void UMultiplayerSessionSubsystem::UpdateHostContinueSaveAfterSuccessfulSave(
+	const FString& SaveSlotName, const FString& SessionId, const FString& MapPath,
+	const FDateTime& LastSaveUtc)
+{
+	FGercekContinueSessionInfo ContinueInfo = CachedContinueInfo;
+	ContinueInfo.bHasSave = !SaveSlotName.IsEmpty();
+	ContinueInfo.bWasHost = true;
+	ContinueInfo.bIsContinueSession = true;
+	ContinueInfo.SaveSlotName = SaveSlotName;
+	ContinueInfo.SessionId = SessionId;
+	ContinueInfo.MapPath = MapPath.IsEmpty() ? TEXT("/Game/Istanbul") : MapPath;
+	ContinueInfo.HostDisplayName = GetLocalPlayerNickname();
+	ContinueInfo.HostNetId = GetLocalNetIdString();
+	ContinueInfo.LastSuccessfulSaveUtc = LastSaveUtc;
+	CacheContinueSession(ContinueInfo);
 }
 
 void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
@@ -306,7 +344,8 @@ void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bo
 	if (bWasSuccessful)
 	{
 		FGercekContinueSessionInfo ContinueInfo;
-		ContinueInfo.bHasSave = true;
+		ContinueInfo.bHasSave =
+			UGameplayStatics::DoesSaveGameExist(PendingSessionConfig.SaveSlotName, 0);
 		ContinueInfo.bWasHost = true;
 		ContinueInfo.bIsContinueSession = PendingSessionConfig.bIsContinueSession;
 		ContinueInfo.bIsPasswordProtected = !PendingSessionConfig.Password.IsEmpty();
@@ -441,6 +480,7 @@ void UMultiplayerSessionSubsystem::OnJoinSessionComplete(FName SessionName, EOnJ
 		ContinueInfo.MapPath = TEXT("/Game/Istanbul");
 		ContinueInfo.HostDisplayName = PendingJoinBrowserResult.HostName;
 		ContinueInfo.Password = PendingJoinPassword;
+		ContinueInfo.LastSuccessfulSaveUtc = CachedContinueInfo.LastSuccessfulSaveUtc;
 		CacheContinueSession(ContinueInfo);
 
 		FString Address;
@@ -504,7 +544,9 @@ void UMultiplayerSessionSubsystem::BroadcastOperationMessage(const FString& Mess
 
 void UMultiplayerSessionSubsystem::BroadcastContinueState() const
 {
-	const_cast<UMultiplayerSessionSubsystem*>(this)->OnContinueSaveAvailabilityChangedEvent.Broadcast(CachedContinueInfo.bHasSave, CachedContinueInfo);
+	FGercekContinueSessionInfo ContinueInfo = CachedContinueInfo;
+	ContinueInfo.bHasSave = IsContinueInfoUsable(CachedContinueInfo);
+	const_cast<UMultiplayerSessionSubsystem*>(this)->OnContinueSaveAvailabilityChangedEvent.Broadcast(ContinueInfo.bHasSave, ContinueInfo);
 }
 
 void UMultiplayerSessionSubsystem::CacheContinueSession(const FGercekContinueSessionInfo& ContinueInfo)
@@ -535,21 +577,47 @@ void UMultiplayerSessionSubsystem::LoadContinueSessionCache()
 			CachedContinueInfo = SaveGame->SavedSession;
 		}
 	}
+
+	if (!IsContinueInfoUsable(CachedContinueInfo))
+	{
+		const FString PreservedPassword = CachedContinueInfo.Password;
+		CachedContinueInfo = FGercekContinueSessionInfo();
+		CachedContinueInfo.SaveSlotName = TEXT("Gercek_HostWorld");
+		CachedContinueInfo.Password = PreservedPassword;
+	}
 }
 
 FGercekSessionConfig UMultiplayerSessionSubsystem::BuildConfigFromContinueSave() const
 {
+	const FGercekContinueSessionInfo ContinueInfo = GetContinueSaveInfo();
 	FGercekSessionConfig SessionConfig;
 	SessionConfig.MaxPlayers = 4;
 	SessionConfig.bIsLAN = false;
-	SessionConfig.Visibility = CachedContinueInfo.Visibility;
-	SessionConfig.Password = CachedContinueInfo.Password;
-	SessionConfig.SaveSlotName = CachedContinueInfo.SaveSlotName;
-	SessionConfig.SessionId = CachedContinueInfo.SessionId;
-	SessionConfig.MapPath = CachedContinueInfo.MapPath.IsEmpty() ? TEXT("/Game/Istanbul") : CachedContinueInfo.MapPath;
+	SessionConfig.Visibility = ContinueInfo.Visibility;
+	SessionConfig.Password = ContinueInfo.Password;
+	SessionConfig.SaveSlotName = ContinueInfo.SaveSlotName;
+	SessionConfig.SessionId = ContinueInfo.SessionId;
+	SessionConfig.MapPath = ContinueInfo.MapPath.IsEmpty() ? TEXT("/Game/Istanbul") : ContinueInfo.MapPath;
 	SessionConfig.bIsContinueSession = true;
 	SessionConfig.bTravelOnCreate = true;
 	return SessionConfig;
+}
+
+bool UMultiplayerSessionSubsystem::IsContinueInfoUsable(
+	const FGercekContinueSessionInfo& ContinueInfo) const
+{
+	if (!ContinueInfo.bHasSave)
+	{
+		return false;
+	}
+
+	if (ContinueInfo.bWasHost)
+	{
+		return !ContinueInfo.SaveSlotName.IsEmpty() &&
+			UGameplayStatics::DoesSaveGameExist(ContinueInfo.SaveSlotName, 0);
+	}
+
+	return !ContinueInfo.SessionId.IsEmpty();
 }
 
 FGercekSessionBrowserResult UMultiplayerSessionSubsystem::BuildBrowserResult(const FOnlineSessionSearchResult& SearchResult) const

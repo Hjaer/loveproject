@@ -10,6 +10,7 @@
 #include "Misc/SecureHash.h"
 #include "MultiplayerSessionSubsystem.h"
 #include "PostApocInventoryTypes.h"
+#include "WorldInventoryComponent.h"
 #include "WorldItemActor.h"
 #include "EngineUtils.h"
 
@@ -74,6 +75,8 @@ void AGercekGameMode::InitializeHostSaveState()
 		ActiveHostSaveSlotName = TEXT("Gercek_HostWorld");
 	}
 
+	bool bLoadedExistingSave = false;
+
 	const bool bShouldLoadExistingSave = [&]() -> bool
 	{
 		if (UGameInstance* GameInstance = GetGameInstance())
@@ -90,6 +93,7 @@ void AGercekGameMode::InitializeHostSaveState()
 	if (bShouldLoadExistingSave && UGameplayStatics::DoesSaveGameExist(ActiveHostSaveSlotName, 0))
 	{
 		ActiveHostSave = Cast<UGercekHostSaveGame>(UGameplayStatics::LoadGameFromSlot(ActiveHostSaveSlotName, 0));
+		bLoadedExistingSave = ActiveHostSave != nullptr;
 	}
 
 	if (!ActiveHostSave)
@@ -119,9 +123,32 @@ void AGercekGameMode::InitializeHostSaveState()
 		if (UMultiplayerSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionSubsystem>())
 		{
 			const FGercekContinueSessionInfo ContinueInfo = SessionSubsystem->GetContinueSaveInfo();
-			ActiveHostSave->WorldState.SessionId = ContinueInfo.SessionId;
+			if (!ContinueInfo.SessionId.IsEmpty())
+			{
+				ActiveHostSave->WorldState.SessionId = ContinueInfo.SessionId;
+			}
 			ActiveHostSave->WorldState.MapPath = ContinueInfo.MapPath.IsEmpty() ? TEXT("/Game/Istanbul") : ContinueInfo.MapPath;
+
+			if (bLoadedExistingSave)
+			{
+				SessionSubsystem->UpdateHostContinueSaveAfterSuccessfulSave(
+					ActiveHostSaveSlotName,
+					ActiveHostSave->WorldState.SessionId,
+					ActiveHostSave->WorldState.MapPath,
+					ActiveHostSave->WorldState.LastSaveUtc);
+			}
 		}
+	}
+
+	if (ActiveHostSave->WorldState.SessionId.IsEmpty())
+	{
+		ActiveHostSave->WorldState.SessionId =
+			FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+	}
+
+	if (ActiveHostSave->WorldState.MapPath.IsEmpty())
+	{
+		ActiveHostSave->WorldState.MapPath = TEXT("/Game/Istanbul");
 	}
 
 	ActiveHostSave->WorldState.LastSaveUtc = FDateTime::UtcNow();
@@ -177,6 +204,15 @@ void AGercekGameMode::SnapshotActivePlayersIntoSave()
 	if (!HasAuthority() || !ActiveHostSave)
 	{
 		return;
+	}
+
+	if (ActiveHostSaveSlotName.IsEmpty())
+	{
+		ActiveHostSaveSlotName = ResolveHostSaveSlotName();
+		if (ActiveHostSaveSlotName.IsEmpty())
+		{
+			ActiveHostSaveSlotName = TEXT("Gercek_HostWorld");
+		}
 	}
 
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
@@ -800,6 +836,18 @@ void AGercekGameMode::HandleAsyncSaveFinished(const FString& SlotName,
 		UE_LOG(LogTemp, Warning,
 			TEXT("[GercekGameMode] Async save basarisiz oldu. Slot: %s UserIndex: %d"),
 			*SlotName, UserIndex);
+	}
+	else if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UMultiplayerSessionSubsystem* SessionSubsystem =
+				GameInstance->GetSubsystem<UMultiplayerSessionSubsystem>())
+		{
+			SessionSubsystem->UpdateHostContinueSaveAfterSuccessfulSave(
+				ActiveHostSaveSlotName,
+				ActiveHostSave ? ActiveHostSave->WorldState.SessionId : FString(),
+				ActiveHostSave ? ActiveHostSave->WorldState.MapPath : FString(),
+				ActiveHostSave ? ActiveHostSave->WorldState.LastSaveUtc : FDateTime());
+		}
 	}
 
 	if (bPendingFollowupSave)

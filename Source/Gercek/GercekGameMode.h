@@ -19,7 +19,7 @@ public:
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Save System")
-	float AutosaveIntervalSeconds = 60.0f;
+	float AutosaveIntervalSeconds = 120.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Save System")
 	float RestoreRetryIntervalSeconds = 0.25f;

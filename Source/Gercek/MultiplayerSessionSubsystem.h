@@ -145,6 +145,9 @@ struct FGercekContinueSessionInfo
 
 	UPROPERTY(BlueprintReadOnly, Category = "Continue")
 	FString Password;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Continue")
+	FDateTime LastSuccessfulSaveUtc;
 };
 
 UCLASS()
@@ -208,6 +211,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Steam Co-Op")
 	FGercekContinueSessionInfo GetContinueSaveInfo() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Steam Co-Op")
+	void UpdateHostContinueSaveAfterSuccessfulSave(const FString& SaveSlotName,
+		const FString& SessionId, const FString& MapPath,
+		const FDateTime& LastSaveUtc);
+
 	UPROPERTY(BlueprintAssignable, Category = "Steam Co-Op | Events")
 	FMultiplayerOnCreateSessionComplete OnCreateSessionCompleteEvent;
 
@@ -242,6 +250,7 @@ private:
 	void CacheContinueSession(const FGercekContinueSessionInfo& ContinueInfo);
 	void LoadContinueSessionCache();
 	FGercekSessionConfig BuildConfigFromContinueSave() const;
+	bool IsContinueInfoUsable(const FGercekContinueSessionInfo& ContinueInfo) const;
 	FGercekSessionBrowserResult BuildBrowserResult(const FOnlineSessionSearchResult& SearchResult) const;
 	EGercekServerVisibility ResolveVisibility(const FOnlineSessionSettings& SessionSettings) const;
 	bool ValidatePasswordForSession(const FOnlineSessionSearchResult& SearchResult, const FString& Password) const;
