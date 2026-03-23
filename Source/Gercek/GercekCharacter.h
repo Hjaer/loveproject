@@ -82,6 +82,8 @@ public:
   virtual void Jump() override;
   UFUNCTION(Server, Reliable)
   void ServerInteract(AActor *TargetActor);
+  UFUNCTION(Server, Reliable)
+  void ServerSetSprinting(bool bNewSprinting);
   UFUNCTION(Client, Reliable)
   void ClientOpenTradeScreen(class AMerchantBase *TargetMerchant);
   UFUNCTION(Client, Reliable)
@@ -122,6 +124,9 @@ protected:
   float ResolveConsumableAmount(const FPostApocItemRow& ItemRow,
                                 EConsumableFillState FillState) const;
   float GetEffectiveMaxStamina() const;
+  float GetCurrentStaminaRecoveryMultiplier() const;
+  float GetCurrentHungerConsumptionMultiplier() const;
+  float GetCurrentThirstConsumptionMultiplier() const;
   void ResetStaminaRecoveryBuff();
 
   // Son hasar alÄ±nan zamanÄ± takip eden sayÄ±ÅŸ (Health regen lockout iÃ§in)
@@ -183,11 +188,56 @@ protected:
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival Stats")
   float StaminaRecoveryRate;
 
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Recovery",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float MovingStaminaRecoveryMultiplier = 1.0f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Recovery",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float IdleStaminaRecoveryMultiplier = 1.35f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Recovery",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float CrouchStaminaRecoveryMultiplier = 1.25f;
+
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival Stats")
   float HungerDecreaseRate;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival Stats")
   float ThirstDecreaseRate;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float WalkHungerConsumptionMultiplier = 1.0f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float SprintHungerConsumptionMultiplier = 1.15f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float CrouchHungerConsumptionMultiplier = 0.7f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float WalkThirstConsumptionMultiplier = 1.0f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float SprintThirstConsumptionMultiplier = 1.75f;
+
+  UPROPERTY(EditAnywhere, BlueprintReadWrite,
+            Category = "Survival Stats|Movement Consumption",
+            meta = (ClampMin = "0.0", UIMin = "0.0"))
+  float CrouchThirstConsumptionMultiplier = 0.65f;
 
   UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Survival Stats")
   float HungerHealthDecayRate = 0.08f;

@@ -67,6 +67,10 @@
 		{
 			"Name": "Landmass",
 			"Enabled": true
+		},
+		{
+			"Name": "ChaosVehiclesPlugin",
+			"Enabled": true
 		}
 	]
 }

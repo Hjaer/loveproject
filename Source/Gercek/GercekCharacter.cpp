@@ -92,8 +92,17 @@ AGercekCharacter::AGercekCharacter() {
 
   StaminaDepletionRate = 12.5f;
   StaminaRecoveryRate = 10.0f;
+  MovingStaminaRecoveryMultiplier = 1.0f;
+  IdleStaminaRecoveryMultiplier = 1.35f;
+  CrouchStaminaRecoveryMultiplier = 1.25f;
   HungerDecreaseRate = 0.05f;
   ThirstDecreaseRate = 0.07f;
+  WalkHungerConsumptionMultiplier = 1.0f;
+  SprintHungerConsumptionMultiplier = 1.15f;
+  CrouchHungerConsumptionMultiplier = 0.7f;
+  WalkThirstConsumptionMultiplier = 1.0f;
+  SprintThirstConsumptionMultiplier = 1.75f;
+  CrouchThirstConsumptionMultiplier = 0.65f;
 
   bIsSprinting = false;
   bIsFatigued = false;
@@ -435,8 +444,13 @@ void AGercekCharacter::Tick(float DeltaTime) {
   // Sunucu (Server) yetkili stat gÃ¼ncellemeleri
   if (HasAuthority()) {
     // Zamanla aÃ§lÄ±k ve susuzluk azalmasÄ±
+    const float CurrentHungerDecreaseRate =
+        HungerDecreaseRate * GetCurrentHungerConsumptionMultiplier();
+    const float CurrentThirstDecreaseRate =
+        ThirstDecreaseRate * GetCurrentThirstConsumptionMultiplier();
+
     if (Hunger > 0.0f) {
-      Hunger -= DeltaTime * HungerDecreaseRate;
+      Hunger -= DeltaTime * CurrentHungerDecreaseRate;
       Hunger = FMath::Clamp(Hunger, 0.0f, 100.0f);
     } else {
       Health -= HungerHealthDecayRate * DeltaTime;
@@ -444,7 +458,7 @@ void AGercekCharacter::Tick(float DeltaTime) {
     }
 
     if (Thirst > 0.0f) {
-      Thirst -= DeltaTime * ThirstDecreaseRate;
+      Thirst -= DeltaTime * CurrentThirstDecreaseRate;
       Thirst = FMath::Clamp(Thirst, 0.0f, 100.0f);
     }
 
@@ -494,6 +508,7 @@ void AGercekCharacter::Tick(float DeltaTime) {
 
       if (Stamina <= 0.0f) {
         Stamina = 0.0f;
+        bIsSprinting = false;
         bIsExhausted = true;
         bIsRecovering = true;
         RecoveryDelayTimer =
@@ -520,6 +535,8 @@ void AGercekCharacter::Tick(float DeltaTime) {
           if (Stamina < 20.0f) {
             CurrentRegenRate = 5.0f;
           }
+
+          CurrentRegenRate *= GetCurrentStaminaRecoveryMultiplier();
 
           Stamina += DeltaTime * CurrentRegenRate;
           Stamina = FMath::Clamp(Stamina, 0.0f, EffectiveMaxStamina);
@@ -770,22 +787,32 @@ void AGercekCharacter::SetupPlayerInputComponent(
 void AGercekCharacter::StartSprint() {
   if (Stamina > 0.0f && !bIsCrouched && !bIsFatigued) {
     bIsSprinting = true;
+    if (!HasAuthority()) {
+      ServerSetSprinting(true);
+    }
     // HÄ±z geÃ§iÅŸi Tick iÃ§erisinde FInterpTo ile yapÄ±lÄ±yor.
   }
 }
 
 void AGercekCharacter::StopSprint() {
   bIsSprinting = false;
+  if (!HasAuthority()) {
+    ServerSetSprinting(false);
+  }
   // HÄ±z geÃ§iÅŸi Tick iÃ§erisinde FInterpTo ile yapÄ±lÄ±yor.
 }
 
 void AGercekCharacter::StartCrouch() {
-  if (!bIsSprinting) {
-    Crouch();
+  if (bIsSprinting) {
+    StopSprint();
   }
+
+  Crouch();
 }
 
-void AGercekCharacter::StopCrouch() { UnCrouch(); }
+void AGercekCharacter::StopCrouch() {
+  UnCrouch();
+}
 
 void AGercekCharacter::Jump() {
   // GerÃ§ekÃ§ilik kuralÄ±: Sadece yerde iken zÄ±planabilir.
@@ -1038,6 +1065,55 @@ float AGercekCharacter::ResolveConsumableAmount(
 
 float AGercekCharacter::GetEffectiveMaxStamina() const {
   return Thirst <= 0.0f ? MaxStamina * 0.5f : MaxStamina;
+}
+
+float AGercekCharacter::GetCurrentStaminaRecoveryMultiplier() const {
+  float RecoveryMultiplier = MovingStaminaRecoveryMultiplier;
+  const bool bIsStationary = GetVelocity().SizeSquared() <= 1.0f;
+
+  if (bIsStationary) {
+    RecoveryMultiplier *= IdleStaminaRecoveryMultiplier;
+  }
+
+  if (bIsCrouched) {
+    RecoveryMultiplier *= CrouchStaminaRecoveryMultiplier;
+  }
+
+  return RecoveryMultiplier;
+}
+
+float AGercekCharacter::GetCurrentHungerConsumptionMultiplier() const {
+  const bool bIsActivelySprinting =
+      bIsSprinting && GetVelocity().SizeSquared() > 0.0f && !bIsExhausted;
+
+  if (bIsCrouched) {
+    return CrouchHungerConsumptionMultiplier;
+  }
+
+  if (bIsActivelySprinting) {
+    return SprintHungerConsumptionMultiplier;
+  }
+
+  return WalkHungerConsumptionMultiplier;
+}
+
+float AGercekCharacter::GetCurrentThirstConsumptionMultiplier() const {
+  const bool bIsActivelySprinting =
+      bIsSprinting && GetVelocity().SizeSquared() > 0.0f && !bIsExhausted;
+
+  if (bIsCrouched) {
+    return CrouchThirstConsumptionMultiplier;
+  }
+
+  if (bIsActivelySprinting) {
+    return SprintThirstConsumptionMultiplier;
+  }
+
+  return WalkThirstConsumptionMultiplier;
+}
+
+void AGercekCharacter::ServerSetSprinting_Implementation(bool bNewSprinting) {
+  bIsSprinting = bNewSprinting && !bIsCrouched && !bIsFatigued && Stamina > 0.0f;
 }
 
 void AGercekCharacter::ApplyItemEffect(EItemType Type, float Amount) {

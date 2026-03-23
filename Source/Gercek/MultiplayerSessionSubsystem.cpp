@@ -606,7 +606,7 @@ FGercekSessionConfig UMultiplayerSessionSubsystem::BuildConfigFromContinueSave()
 bool UMultiplayerSessionSubsystem::IsContinueInfoUsable(
 	const FGercekContinueSessionInfo& ContinueInfo) const
 {
-	if (!ContinueInfo.bHasSave)
+	if (!ContinueInfo.bHasSave || !ContinueInfo.bIsContinueSession)
 	{
 		return false;
 	}
