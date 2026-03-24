@@ -13,5 +13,17 @@ public class Gercek : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[]
+			{
+				"UnrealEd",
+				"BlueprintEditorLibrary",
+				"KismetCompiler",
+				"BlueprintGraph",
+				"UMGEditor"
+			});
+		}
 	}
 }
