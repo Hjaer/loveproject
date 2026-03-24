@@ -1,6 +1,7 @@
 #include "GercekPCGVolume.h"
 
-AGercekPCGVolume::AGercekPCGVolume()
+AGercekPCGVolume::AGercekPCGVolume(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	CurrentSettings = nullptr;
 	GlobalTreesDensity = 1.0f;
