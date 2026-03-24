@@ -14,7 +14,7 @@ class GERCEK_API AGercekPCGVolume : public APCGVolume
 	GENERATED_BODY()
 
 public:
-	AGercekPCGVolume();
+	AGercekPCGVolume(const FObjectInitializer& ObjectInitializer);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PCG|Legacy")
 	TObjectPtr<UObject> CurrentSettings;
