@@ -5,6 +5,8 @@
 #include "GercekCharacter.h"
 #include "Kismet/GameplayStatics.h"
 
+void UPostApocHUDWidget::RefreshCharacterBinding() { BindToCharacter(); }
+
 void UPostApocHUDWidget::NativeConstruct() {
   Super::NativeConstruct();
   BindToCharacter();
@@ -16,15 +18,38 @@ void UPostApocHUDWidget::NativeDestruct() {
 }
 
 void UPostApocHUDWidget::BindToCharacter() {
+  AGercekCharacter* CandidateCharacter = nullptr;
+
+  if (APlayerController* OwningPlayerController = GetOwningPlayer()) {
+    CandidateCharacter =
+        Cast<AGercekCharacter>(OwningPlayerController->GetPawn());
+  }
+
+  if (!CandidateCharacter) {
+    CandidateCharacter = Cast<AGercekCharacter>(GetOwningPlayerPawn());
+  }
+
+  if (!CandidateCharacter) {
+    AGercekCharacter* FallbackCharacter =
+        Cast<AGercekCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+    if (FallbackCharacter && FallbackCharacter->IsLocallyControlled()) {
+      CandidateCharacter = FallbackCharacter;
+    }
+  }
+
+  if (BoundCharacter == CandidateCharacter && BoundCharacter) {
+    if (UWorld* World = GetWorld()) {
+      World->GetTimerManager().ClearTimer(DelayedBindRetryHandle);
+    }
+    BoundCharacter->BroadcastCurrentSurvivalStats(true);
+    return;
+  }
+
   if (BoundCharacter) {
     UnbindFromCharacter();
   }
 
-  BoundCharacter = Cast<AGercekCharacter>(GetOwningPlayerPawn());
-  if (!BoundCharacter) {
-    BoundCharacter =
-        Cast<AGercekCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
-  }
+  BoundCharacter = CandidateCharacter;
 
   if (!BoundCharacter) {
     if (UWorld *World = GetWorld()) {

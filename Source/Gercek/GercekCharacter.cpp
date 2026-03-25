@@ -200,6 +200,10 @@ void AGercekCharacter::EnsureLocalHUDCreated() {
   if (PlayerHUDWidget && !PlayerHUDWidget->IsInViewport()) {
     PlayerHUDWidget->AddToViewport();
   }
+
+  if (PlayerHUDWidget) {
+    PlayerHUDWidget->RefreshCharacterBinding();
+  }
 }
 
 void AGercekCharacter::SyncPlayerInventoryToOwner() {

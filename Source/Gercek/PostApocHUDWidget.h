@@ -13,6 +13,10 @@ UCLASS()
 class GERCEK_API UPostApocHUDWidget : public UUserWidget {
   GENERATED_BODY()
 
+public:
+  UFUNCTION(BlueprintCallable, Category = "HUD")
+  void RefreshCharacterBinding();
+
 protected:
   virtual void NativeConstruct() override;
   virtual void NativeDestruct() override;
