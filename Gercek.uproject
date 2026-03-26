@@ -73,6 +73,21 @@
 			"Enabled": true
 		},
 		{
+<<<<<<< HEAD
+=======
+			"Name": "MetaHumanCharacter",
+			"Enabled": true
+		},
+		{
+			"Name": "MetaHuman",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Linux"
+			]
+		},
+		{
+>>>>>>> 66fd0f9e99b8b95ac34aa04939bd1230afb35563
 			"Name": "MetaHumanCoreTech",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [
@@ -81,6 +96,7 @@
 			]
 		},
 		{
+<<<<<<< HEAD
 			"Name": "MetaHumanCharacterUAF",
 			"Enabled": true
 		},
@@ -89,12 +105,21 @@
 			"Enabled": true
 		},
 		{
+=======
+>>>>>>> 66fd0f9e99b8b95ac34aa04939bd1230afb35563
 			"Name": "MetaHumanCalibrationProcessing",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [
 				"Win64",
 				"Linux"
 			]
+<<<<<<< HEAD
+=======
+		},
+		{
+			"Name": "MetaHumanLiveLink",
+			"Enabled": true
+>>>>>>> 66fd0f9e99b8b95ac34aa04939bd1230afb35563
 		}
 	]
 }

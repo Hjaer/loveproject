@@ -41,6 +41,47 @@ namespace GercekInteraction {
 constexpr ECollisionChannel TraceChannel = ECC_GameTraceChannel2;
 }
 
+namespace {
+
+UPostApocInventoryGridWidget* ResolveInventoryGridWidget(UUserWidget* RootWidget) {
+  if (!IsValid(RootWidget)) {
+    return nullptr;
+  }
+
+  if (UPostApocInventoryGridWidget* DirectGrid =
+          Cast<UPostApocInventoryGridWidget>(RootWidget)) {
+    return DirectGrid;
+  }
+
+  static const FName CandidateNames[] = {
+      TEXT("PlayerInventoryGrid"),
+      TEXT("InventoryGridUI"),
+      TEXT("PlayerGridUI"),
+      TEXT("OyuncuCanta")};
+
+  for (const FName& CandidateName : CandidateNames) {
+    if (UWidget* FoundWidget = RootWidget->GetWidgetFromName(CandidateName)) {
+      if (UPostApocInventoryGridWidget* GridWidget =
+              Cast<UPostApocInventoryGridWidget>(FoundWidget)) {
+        return GridWidget;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+UUserWidget* ResolveInventoryRefreshTarget(UUserWidget* RootWidget) {
+  if (UPostApocInventoryGridWidget* GridWidget =
+          ResolveInventoryGridWidget(RootWidget)) {
+    return GridWidget;
+  }
+
+  return RootWidget;
+}
+
+} // namespace
+
 
 // Sets default values
 AGercekCharacter::AGercekCharacter() {
@@ -1007,7 +1048,7 @@ void AGercekCharacter::ToggleInventory() {
     InventoryWidget->SetVisibility(ESlateVisibility::Visible);
 
     if (UPostApocInventoryGridWidget *InventoryGridWidget =
-            Cast<UPostApocInventoryGridWidget>(InventoryWidget)) {
+            ResolveInventoryGridWidget(InventoryWidget)) {
       InventoryGridWidget->InitializeGridContext(
           InventoryComponent, this, nullptr,
           EPostApocInventoryGridRole::PlayerInventory);
@@ -1015,7 +1056,8 @@ void AGercekCharacter::ToggleInventory() {
     }
 
     if (InventoryComponent) {
-      InventoryComponent->NativeRefreshUI(InventoryWidget);
+      InventoryComponent->NativeRefreshUI(
+          ResolveInventoryRefreshTarget(InventoryWidget));
     }
 
     // Fareyi gÃ¶ster.
@@ -1325,7 +1367,8 @@ void AGercekCharacter::HandleGridInventoryUpdated() {
   SyncPlayerInventoryToOwner();
 
   if (InventoryComponent && IsValid(InventoryWidget)) {
-    InventoryComponent->NativeRefreshUI(InventoryWidget);
+    InventoryComponent->NativeRefreshUI(
+        ResolveInventoryRefreshTarget(InventoryWidget));
   }
 
   if (IsValid(ActiveLootContainerWidget)) {
