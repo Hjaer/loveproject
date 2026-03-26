@@ -6,17 +6,22 @@
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "CollisionQueryParams.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Components/AudioComponent.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/InputComponent.h"
+#include "Components/PanelWidget.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/TextBlock.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/HitResult.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -27,7 +32,9 @@
 #include "Net/UnrealNetwork.h"
 #include "PlayerInventoryComponent.h"
 #include "PostApocInventoryGridWidget.h"
+#include "PostApocInventoryFallbackWidget.h"
 #include "PostApocInventoryTypes.h"
+#include "PostApocGridItem.h"
 #include "PostApocHUDWidget.h"
 #include "PostApocItemTypes.h"
 #include "PostApocTradeOfferWidgets.h"
@@ -80,6 +87,122 @@ UUserWidget* ResolveInventoryRefreshTarget(UUserWidget* RootWidget) {
   return RootWidget;
 }
 
+TSubclassOf<UUserWidget> ResolvePreferredInventoryWidgetClass(
+    TSubclassOf<UUserWidget> AssignedClass) {
+  if (UClass* CanonicalInventoryWidgetClass =
+          LoadClass<UUserWidget>(nullptr,
+                                 TEXT("/Game/Gercek/Inventory/WBP_InventoryScreen.WBP_InventoryScreen_C"))) {
+    return CanonicalInventoryWidgetClass;
+  }
+
+  if (AssignedClass &&
+      !AssignedClass->IsChildOf(UPostApocGridItem::StaticClass())) {
+    return AssignedClass;
+  }
+
+  return UPostApocInventoryFallbackWidget::StaticClass();
+}
+
+void EnsureInventoryBackground(UUserWidget* RootWidget,
+                               UPostApocInventoryComponent* InventoryComponent) {
+  if (!IsValid(RootWidget)) {
+    return;
+  }
+
+  if (!RootWidget->IsA(UPostApocInventoryFallbackWidget::StaticClass())) {
+    return;
+  }
+
+  RootWidget->SetRenderOpacity(1.0f);
+  RootWidget->SetVisibility(ESlateVisibility::Visible);
+
+  if (!RootWidget->WidgetTree) {
+    return;
+  }
+
+  if (UWidget* TreeRoot = RootWidget->WidgetTree->RootWidget) {
+    TreeRoot->SetVisibility(ESlateVisibility::Visible);
+    TreeRoot->SetRenderOpacity(1.0f);
+  }
+
+  UPanelWidget* TargetPanel = nullptr;
+  UCanvasPanel* CanvasPanel = nullptr;
+
+  CanvasPanel = Cast<UCanvasPanel>(RootWidget->GetWidgetFromName(TEXT("GridCanvas")));
+  if (!CanvasPanel) {
+    if (UPostApocInventoryGridWidget* GridWidget =
+            ResolveInventoryGridWidget(RootWidget)) {
+      CanvasPanel = Cast<UCanvasPanel>(
+          GridWidget->GetWidgetFromName(TEXT("GridCanvas")));
+    }
+  }
+
+  if (CanvasPanel) {
+    TargetPanel = CanvasPanel;
+  } else {
+    TargetPanel = Cast<UPanelWidget>(RootWidget->WidgetTree->RootWidget);
+    CanvasPanel = Cast<UCanvasPanel>(TargetPanel);
+  }
+
+  if (!TargetPanel) {
+    CanvasPanel = RootWidget->WidgetTree->ConstructWidget<UCanvasPanel>(
+        UCanvasPanel::StaticClass(), TEXT("InventoryRuntimeRoot"));
+    if (!CanvasPanel) {
+      return;
+    }
+    RootWidget->WidgetTree->RootWidget = CanvasPanel;
+    TargetPanel = CanvasPanel;
+  }
+
+  for (int32 ChildIndex = 0; ChildIndex < TargetPanel->GetChildrenCount();
+       ++ChildIndex) {
+    if (UWidget* ExistingChild = TargetPanel->GetChildAt(ChildIndex)) {
+      if (ExistingChild->GetFName() == TEXT("InventoryBackground")) {
+        return;
+      }
+    }
+  }
+
+  UBorder* Background = RootWidget->WidgetTree->ConstructWidget<UBorder>(
+      UBorder::StaticClass(), TEXT("InventoryBackground"));
+  if (!Background) {
+    return;
+  }
+
+  Background->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.02f, 0.85f));
+  Background->SetVisibility(ESlateVisibility::Visible);
+
+  UTextBlock* TitleText = RootWidget->WidgetTree->ConstructWidget<UTextBlock>(
+      UTextBlock::StaticClass(), TEXT("InventoryTitle"));
+  if (TitleText) {
+    TitleText->SetText(FText::FromString(TEXT("ENVANTER")));
+    TitleText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    Background->SetContent(TitleText);
+  }
+
+  if (CanvasPanel) {
+    UCanvasPanelSlot* CanvasSlot = CanvasPanel->AddChildToCanvas(Background);
+    if (!CanvasSlot) {
+      return;
+    }
+
+    const float TileSize = InventoryComponent ? InventoryComponent->TileSize : 50.0f;
+    const int32 Columns = InventoryComponent ? InventoryComponent->GridColumns : 10;
+    const int32 Rows = InventoryComponent ? InventoryComponent->GridRows : 10;
+    const FVector2D PanelSize(
+        FMath::Max(350.0f, Columns * TileSize + 24.0f),
+        FMath::Max(350.0f, Rows * TileSize + 24.0f));
+
+    CanvasSlot->SetAutoSize(false);
+    CanvasSlot->SetPosition(FVector2D(40.0f, 40.0f));
+    CanvasSlot->SetSize(PanelSize);
+    CanvasSlot->SetZOrder(-100);
+    return;
+  }
+
+  TargetPanel->AddChild(Background);
+}
+
 } // namespace
 
 
@@ -111,8 +234,64 @@ AGercekCharacter::AGercekCharacter() {
       TEXT("InventoryComponent"));
   if (InventoryComponent) {
     InventoryComponent->GridColumns = 10;
-    InventoryComponent->GridRows = 10; // Daha geniÅŸ Ä±zgara
+    InventoryComponent->GridRows = 10;
     InventoryComponent->TileSize = 50.0f;
+
+    if (!InventoryComponent->GridItemWidgetClass) {
+      static ConstructorHelpers::FClassFinder<UUserWidget> GridItemWidgetBP(
+          TEXT("/Game/Gercek/Inventory/WBP_GridItem"));
+      if (GridItemWidgetBP.Succeeded()) {
+        InventoryComponent->GridItemWidgetClass = GridItemWidgetBP.Class;
+      }
+    }
+
+    if (!InventoryComponent->ItemDataTable) {
+      static ConstructorHelpers::FObjectFinder<UDataTable> ItemDataTableAsset(
+          TEXT("/Game/Gercek/Datas/PostApocItems.PostApocItems"));
+      if (ItemDataTableAsset.Succeeded()) {
+        InventoryComponent->ItemDataTable = ItemDataTableAsset.Object;
+      }
+    }
+  }
+
+  if (!DefaultMappingContext) {
+    static ConstructorHelpers::FObjectFinder<UInputMappingContext>
+        DefaultMappingContextAsset(TEXT("/Game/Gercek/IMC_Default.IMC_Default"));
+    if (DefaultMappingContextAsset.Succeeded()) {
+      DefaultMappingContext = DefaultMappingContextAsset.Object;
+    }
+  }
+
+  if (!ToggleInventoryAction) {
+    static ConstructorHelpers::FObjectFinder<UInputAction> InventoryActionAsset(
+        TEXT("/Game/Gercek/IA_Inventory.IA_Inventory"));
+    if (InventoryActionAsset.Succeeded()) {
+      ToggleInventoryAction = InventoryActionAsset.Object;
+    }
+  }
+
+  if (!InventoryWidgetClass) {
+      static ConstructorHelpers::FClassFinder<UUserWidget> InventoryWidgetBP(
+          TEXT("/Game/Gercek/Inventory/WBP_InventoryScreen"));
+      if (InventoryWidgetBP.Succeeded()) {
+        InventoryWidgetClass = InventoryWidgetBP.Class;
+      }
+  }
+
+  if (!LootContainerWidgetClass) {
+    static ConstructorHelpers::FClassFinder<UUserWidget> LootContainerWidgetBP(
+        TEXT("/Game/Gercek/Inventory/WBP_LootContainerScreen"));
+    if (LootContainerWidgetBP.Succeeded()) {
+      LootContainerWidgetClass = LootContainerWidgetBP.Class;
+    }
+  }
+
+  if (!TradeScreenClass) {
+    static ConstructorHelpers::FClassFinder<UUserWidget> TradeScreenWidgetBP(
+        TEXT("/Game/Gercek/Inventory/WBP_TradeScreen_YENI"));
+    if (TradeScreenWidgetBP.Succeeded()) {
+      TradeScreenClass = TradeScreenWidgetBP.Class;
+    }
   }
 
   TradeComponent =
@@ -767,6 +946,8 @@ void AGercekCharacter::SetupPlayerInputComponent(
     UInputComponent *PlayerInputComponent) {
   Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+  bool bInventoryBoundWithEnhancedInput = false;
+
   if (UEnhancedInputComponent *EnhancedInputComponent =
           Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
     // Sprint (KoÅŸma)
@@ -788,6 +969,7 @@ void AGercekCharacter::SetupPlayerInputComponent(
       EnhancedInputComponent->BindAction(ToggleInventoryAction,
                                          ETriggerEvent::Started, this,
                                          &AGercekCharacter::ToggleInventory);
+      bInventoryBoundWithEnhancedInput = true;
     }
 
     // ZÄ±plama eylemi
@@ -819,9 +1001,11 @@ void AGercekCharacter::SetupPlayerInputComponent(
     }
   }
 
-  // Eski tip (Legacy) Input Binding desteÄŸi: Envanter aÃ§ma kapama iÃ§in
-  PlayerInputComponent->BindAction("EnvanterAc", IE_Pressed, this,
-                                   &AGercekCharacter::ToggleInventory);
+  // Legacy input only as fallback; otherwise Tab fires twice and re-closes UI.
+  if (!bInventoryBoundWithEnhancedInput) {
+    PlayerInputComponent->BindAction("EnvanterAc", IE_Pressed, this,
+                                     &AGercekCharacter::ToggleInventory);
+  }
 
   // EtkileÅŸim (Interact) eylemini baÄŸla (Project Settings -> Input -> Action
   // Mappings)
@@ -1015,21 +1199,61 @@ void AGercekCharacter::ClientSyncPlayerInventory_Implementation(
 
 void AGercekCharacter::ToggleInventory() {
   APlayerController *PC = Cast<APlayerController>(GetController());
-  if (!PC || !PC->IsLocalController())
+  if (!PC || !PC->IsLocalController()) {
+    UE_LOG(LogTemp, Warning,
+           TEXT("[Inventory] ToggleInventory aborted: invalid or non-local controller."));
     return;
+  }
+
+  UE_LOG(LogTemp, Display, TEXT("[Inventory] ToggleInventory called on %s"),
+         *GetNameSafe(this));
+
+  const TSubclassOf<UUserWidget> PreferredInventoryWidgetClass =
+      ResolvePreferredInventoryWidgetClass(InventoryWidgetClass);
+
+  UE_LOG(LogTemp, Display,
+         TEXT("[Inventory] AssignedClass=%s PreferredClass=%s"),
+         *GetNameSafe(InventoryWidgetClass),
+         *GetNameSafe(PreferredInventoryWidgetClass));
+
+  if (!PreferredInventoryWidgetClass) {
+    UE_LOG(LogTemp, Error,
+           TEXT("[Inventory] No valid inventory widget class resolved."));
+    if (GEngine) {
+      GEngine->AddOnScreenDebugMessage(
+          -1, 4.0f, FColor::Red,
+          TEXT("Inventory error: widget class bulunamadi."));
+    }
+    return;
+  }
 
   // Widget ilk kez aÃ§Ä±lÄ±yorsa oluÅŸtur (lazy init â€” sadece bir kez).
-  if (!IsValid(InventoryWidget) && InventoryWidgetClass) {
+  if (!IsValid(InventoryWidget) && PreferredInventoryWidgetClass) {
     InventoryWidget =
-        CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
+        CreateWidget<UUserWidget>(GetWorld(), PreferredInventoryWidgetClass);
     if (IsValid(InventoryWidget)) {
+      UE_LOG(LogTemp, Display, TEXT("[Inventory] Inventory widget created: %s"),
+             *GetNameSafe(InventoryWidget));
       InventoryWidget->AddToViewport(10);
+      if (InventoryWidget->IsA(UPostApocInventoryFallbackWidget::StaticClass())) {
+        InventoryWidget->SetPositionInViewport(FVector2D(60.0f, 60.0f), false);
+        InventoryWidget->SetDesiredSizeInViewport(FVector2D(620.0f, 620.0f));
+      }
       InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+    } else {
+      UE_LOG(LogTemp, Error, TEXT("[Inventory] Failed to create inventory widget."));
+      if (GEngine) {
+        GEngine->AddOnScreenDebugMessage(
+            -1, 4.0f, FColor::Red,
+            TEXT("Inventory error: widget create basarisiz."));
+      }
     }
   }
 
-  if (!IsValid(InventoryWidget))
+  if (!IsValid(InventoryWidget)) {
+    UE_LOG(LogTemp, Error, TEXT("[Inventory] InventoryWidget invalid after creation."));
     return;
+  }
 
   const bool bIsOpen =
       InventoryWidget->GetVisibility() == ESlateVisibility::Visible;
@@ -1037,6 +1261,7 @@ void AGercekCharacter::ToggleInventory() {
   if (bIsOpen) {
     // ---- KAPAT ------------------------------------------------
     InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+    UE_LOG(LogTemp, Display, TEXT("[Inventory] Inventory closed."));
 
     // Fareyi gizle, kontrolÃ¼ tamamen oyuna ver.
     PC->bShowMouseCursor = false;
@@ -1046,6 +1271,11 @@ void AGercekCharacter::ToggleInventory() {
   } else {
     // ---- AÃ‡ ---------------------------------------------------
     InventoryWidget->SetVisibility(ESlateVisibility::Visible);
+    if (InventoryWidget->IsA(UPostApocInventoryFallbackWidget::StaticClass())) {
+      InventoryWidget->SetPositionInViewport(FVector2D(60.0f, 60.0f), false);
+      InventoryWidget->SetDesiredSizeInViewport(FVector2D(620.0f, 620.0f));
+    }
+    UE_LOG(LogTemp, Display, TEXT("[Inventory] Inventory opened."));
 
     if (UPostApocInventoryGridWidget *InventoryGridWidget =
             ResolveInventoryGridWidget(InventoryWidget)) {
@@ -1053,22 +1283,29 @@ void AGercekCharacter::ToggleInventory() {
           InventoryComponent, this, nullptr,
           EPostApocInventoryGridRole::PlayerInventory);
       InventoryGridWidget->SetUseDefaultItemActions(true);
+      UE_LOG(LogTemp, Display, TEXT("[Inventory] Grid context initialized."));
+    } else {
+      UE_LOG(LogTemp, Warning,
+             TEXT("[Inventory] No inventory grid widget found inside root widget."));
     }
+
+    EnsureInventoryBackground(InventoryWidget, InventoryComponent);
 
     if (InventoryComponent) {
       InventoryComponent->NativeRefreshUI(
           ResolveInventoryRefreshTarget(InventoryWidget));
+      UE_LOG(LogTemp, Display, TEXT("[Inventory] NativeRefreshUI called."));
+    } else {
+      UE_LOG(LogTemp, Error, TEXT("[Inventory] InventoryComponent missing."));
     }
 
     // Fareyi gÃ¶ster.
     PC->bShowMouseCursor = true;
 
-    // Sadece UI girdilerini kabul et (Game Only / UI Only geÃ§iÅŸi)
-    FInputModeUIOnly UIMode;
-    // Widget'a focus ver
-    UIMode.SetWidgetToFocus(InventoryWidget->TakeWidget());
-    // Tam ekranda farenin pencere dÄ±ÅŸÄ±na Ã§Ä±kmasÄ±nÄ± engelle.
+    // TAB ile tekrar kapatabilmek iÃ§in oyun girdisini tamamen kesmeyelim.
+    FInputModeGameAndUI UIMode;
     UIMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
+    UIMode.SetHideCursorDuringCapture(false);
     PC->SetInputMode(UIMode);
 
     // Debug: mevcut envanter iÃ§eriÄŸini logla.

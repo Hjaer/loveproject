@@ -91,11 +91,23 @@ void UPostApocGridItem::RefreshVisuals() {
   ItemSizeBox->SetWidthOverride(CalculatedWidth);
   ItemSizeBox->SetHeightOverride(CalculatedHeight);
 
+  if (Txt_ItemName) {
+    Txt_ItemName->SetVisibility(ESlateVisibility::Collapsed);
+  }
+  if (Txt_ItemCondition) {
+    Txt_ItemCondition->SetVisibility(ESlateVisibility::Collapsed);
+  }
+  if (Txt_ItemValue) {
+    Txt_ItemValue->SetVisibility(ESlateVisibility::Collapsed);
+  }
+
   const AGercekCharacter* CharacterOwner =
       OwningGridWidget ? OwningGridWidget->GetOwningGercekCharacter() : nullptr;
 
   if (ItemData->ItemIcon.IsNull()) {
+    ItemIcon->SetVisibility(ESlateVisibility::Collapsed);
     if (Txt_ItemName) {
+      Txt_ItemName->SetVisibility(ESlateVisibility::Visible);
       Txt_ItemName->SetText(ItemData->DisplayName);
     }
     if (Txt_ItemCondition || Txt_ItemValue || OwningGridWidget) {
@@ -113,9 +125,11 @@ void UPostApocGridItem::RefreshVisuals() {
       }
 
       if (Txt_ItemCondition) {
+        Txt_ItemCondition->SetVisibility(ESlateVisibility::Visible);
         Txt_ItemCondition->SetText(StateText);
       }
       if (Txt_ItemValue) {
+        Txt_ItemValue->SetVisibility(ESlateVisibility::Visible);
         const FText ValueText = CharacterOwner
                                     ? CharacterOwner->GetKnowledgeAdjustedTradeValueText(
                                           EffectiveValue)
@@ -135,6 +149,7 @@ void UPostApocGridItem::RefreshVisuals() {
     return;
   }
 
+  ItemIcon->SetVisibility(ESlateVisibility::Visible);
   if (UTexture2D* LoadedIcon = ItemData->ItemIcon.LoadSynchronous()) {
     ItemIcon->SetBrushFromTexture(LoadedIcon, true);
   }

@@ -1,4 +1,4 @@
-﻿#include "PostApocInventoryTypes.h"
+#include "PostApocInventoryTypes.h"
 
 #include "Blueprint/UserWidget.h"
 #include "Components/CanvasPanel.h"
@@ -25,6 +25,7 @@ bool UsesBinaryFillStateForCategory(const EPostApocItemCategory Category) {
   return Category == EPostApocItemCategory::Food ||
          Category == EPostApocItemCategory::Drink;
 }
+
 } // namespace
 
 UPostApocInventoryComponent::UPostApocInventoryComponent() {
